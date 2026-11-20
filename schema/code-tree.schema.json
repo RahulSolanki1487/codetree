@@ -60,12 +60,13 @@
     },
     "skipped": {
       "type": "object",
-      "required": ["languages", "generated", "tooBig"],
+      "required": ["languages", "generated", "tooBig", "ignored"],
       "additionalProperties": false,
       "properties": {
         "languages": { "type": "object", "additionalProperties": { "type": "integer" } },
         "generated": { "type": "integer" },
-        "tooBig": { "type": "integer" }
+        "tooBig": { "type": "integer" },
+        "ignored": { "type": "integer" }
       }
     }
   }

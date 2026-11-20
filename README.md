@@ -33,7 +33,7 @@ In Claude Code:
 /codetree:describe    writes the missing descriptions as comments, for you to review
 ```
 
-`scan` shows the areas (the top-level folders), then the classes in one, then a class's members. Anything without a description says "no description yet", and a switch shows only those. It never invents a description.
+`scan` shows the areas (the top-level folders), then the classes in one, then a class's members. It leaves out what the project's own `.gitignore` ignores (build output, copied bundles, vendored code) and minified or bundled files; `--no-gitignore` reads those too. Anything without a description says "no description yet", and a switch shows only those. It never invents a description.
 
 `describe` asks before it starts, lists what is missing, has Claude describe each item **from its code only**, checks every sentence, and inserts it as a comment in the language's own style. You read the change with `git diff`; descriptions stay marked "generated" in the page until you run `codetree describe --accept`.
 

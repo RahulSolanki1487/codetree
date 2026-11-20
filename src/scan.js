@@ -3,6 +3,7 @@
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { use } from './grammars.js';
+import { isIgnored, parseGitignore } from './gitignore.js';
 import { GENERATED, MOST_BYTES, READABLE, SKIP_FOLDERS, UNSUPPORTED } from './languages.js';
 import { readCSharp } from './readers/csharp.js';
 import { readPython } from './readers/python.js';
@@ -14,17 +15,34 @@ const CONTAINERS = new Set(['src', 'source', 'lib', 'libs', 'packages', 'apps', 
 export const GENERATED_FILE = '.codetree/generated.json';
 export const OVERRIDE_FILE = 'codetree.json';
 
-function walk(root, relative, found, counts) {
+/** Whether a file is minified or bundled output: very long lines, which no one wrote by hand. */
+export function looksBundled(source) {
+  if (source.length < 20000) return false;
+  const lines = source.split(/\r?\n/);
+  return source.length / lines.length > 200 || lines.some(l => l.length > 10000);
+}
+
+function walk(root, relative, found, counts, inherited, useGitignore) {
+  let rules = inherited;
+  if (useGitignore) {
+    try {
+      const file = join(root, relative, '.gitignore');
+      if (lstatSync(file).isFile() && lstatSync(file).size < 200_000) rules = [...inherited, ...parseGitignore(readFileSync(file, 'utf8'), relative)];
+    } catch { /* no .gitignore here */ }
+  }
   for (const entry of readdirSync(join(root, relative), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
     const path = relative ? `${relative}/${entry.name}` : entry.name;
     if (entry.isSymbolicLink()) continue; // a link could lead out of the folder
     if (entry.isDirectory()) {
-      if (!SKIP_FOLDERS.has(entry.name) && !entry.name.startsWith('.')) walk(root, path, found, counts);
+      if (SKIP_FOLDERS.has(entry.name) || entry.name.startsWith('.')) continue;
+      if (isIgnored(rules, path, true)) { counts.ignored++; continue; }
+      walk(root, path, found, counts, rules, useGitignore);
       continue;
     }
     if (!entry.isFile()) continue;
     const lower = entry.name.toLowerCase();
     const extension = extname(lower);
+    if (rules.length && isIgnored(rules, path, false) && (READABLE[extension] || UNSUPPORTED[extension])) { counts.ignored++; continue; }
     if (READABLE[extension]) {
       if (GENERATED.some(end => lower.endsWith(end))) { counts.generated++; continue; }
       if (lstatSync(join(root, path)).size > MOST_BYTES) { counts.tooBig++; continue; }
@@ -74,17 +92,20 @@ function mergePartials(entries) {
 }
 
 /** Reads the project. Returns the public tree (`model`) and, for the description step, every item with its position (`items`). */
-export async function scan(folder) {
+export async function scan(folder, { gitignore = true } = {}) {
   const root = resolve(folder);
   const found = [];
-  const counts = { languages: {}, generated: 0, tooBig: 0 };
-  walk(root, '', found, counts);
+  const counts = { languages: {}, generated: 0, tooBig: 0, ignored: 0 };
+  walk(root, '', found, counts, [], gitignore);
   const override = readOverride(root);
 
   const classes = [];
+  let read = 0;
   for (const { path, extension } of found) {
     const { language, reader } = READABLE[extension];
     const source = readFileSync(join(root, path), 'utf8').replace(/^\uFEFF/, '');
+    if (looksBundled(source)) { counts.generated++; continue; }
+    read++;
     const tree = (await use(language)).parse(source);
     const entries = READERS[reader](tree.rootNode, source, path);
     tree.delete();
@@ -105,7 +126,7 @@ export async function scan(folder) {
   const model = {
     version: 1,
     root: override.name ?? basename(root),
-    files: found.length,
+    files: read,
     tiles,
     classes: classes.map(c => ({
       id: c.id, name: c.name, kind: c.kind, ...(c.namespace ? { namespace: c.namespace } : {}), file: c.file, line: c.line, language: c.language,
@@ -114,7 +135,7 @@ export async function scan(folder) {
         name: m.name, kind: m.kind, signature: m.signature, line: m.line, ...(m.file !== c.file ? { file: m.file } : {}), summary: m.summary, generated: false,
       })),
     })),
-    skipped: { languages: counts.languages, generated: counts.generated, tooBig: counts.tooBig },
+    skipped: { languages: counts.languages, generated: counts.generated, tooBig: counts.tooBig, ignored: counts.ignored },
   };
 
   const items = [];

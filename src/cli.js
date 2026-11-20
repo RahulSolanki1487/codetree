@@ -9,8 +9,9 @@ export const VERSION = '0.1.0';
 
 const HELP = `codetree ${VERSION}: a browsable code tree of a C#, TypeScript/JavaScript or Python project.
 
-  codetree scan [folder] [--out code-tree.html] [--json code-tree.json]
+  codetree scan [folder] [--out code-tree.html] [--json code-tree.json] [--no-gitignore]
       Reads the folder (default: here) and writes one HTML file to open in a browser.
+      What the project's .gitignore ignores, and minified or bundled files, are left out.
   codetree describe [folder] --list [--out todo.json]
       Lists what has no description, with its code, for an agent to describe.
   codetree describe [folder] --apply descriptions.json [--dry-run]
@@ -52,7 +53,8 @@ function summary(model) {
   lines.push(`${without} classes, files or members have no description yet.`);
   const langs = Object.entries(model.skipped.languages);
   if (langs.length) lines.push(`Skipped files in unsupported languages: ${langs.map(([l, n]) => `${l} ${n}`).join(', ')}.`);
-  if (model.skipped.generated) lines.push(`Skipped ${model.skipped.generated} generated files.`);
+  if (model.skipped.generated) lines.push(`Skipped ${model.skipped.generated} generated or minified files.`);
+  if (model.skipped.ignored) lines.push(`Left out ${model.skipped.ignored} files and folders the project's .gitignore ignores (--no-gitignore reads them too).`);
   return lines;
 }
 
@@ -67,7 +69,7 @@ export async function run(argv, io = { out: s => process.stdout.write(s + '\n'),
 
   try {
     if (command === 'scan') {
-      const { model } = await scan(root);
+      const { model } = await scan(root, { gitignore: !flags['no-gitignore'] });
       const htmlPath = resolve(flags.out ?? join(root, 'code-tree.html'));
       write(htmlPath, renderHtml(model), flags.force);
       if (flags.json) write(resolve(flags.json), `${JSON.stringify(model, null, 2)}\n`, flags.force);
@@ -76,7 +78,7 @@ export async function run(argv, io = { out: s => process.stdout.write(s + '\n'),
       return 0;
     }
     if (command === 'describe') {
-      const { items } = await scan(root);
+      const { items } = await scan(root, { gitignore: !flags['no-gitignore'] });
       if (flags.accept) { io.out(`Kept ${accept(root)} descriptions: they are no longer marked generated.`); return 0; }
       if (flags.list) {
         const todo = list(items, root);

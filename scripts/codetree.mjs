@@ -4001,6 +4001,57 @@ async function use(language) {
   return p;
 }
 
+// src/gitignore.js
+var MOST_LINES = 2e3;
+var MOST_LENGTH = 200;
+function toRegex(pattern) {
+  let body2 = "";
+  for (let i2 = 0; i2 < pattern.length; i2++) {
+    const c = pattern[i2];
+    if (c === "*") {
+      if (pattern[i2 + 1] === "*") {
+        if (pattern[i2 + 2] === "/") {
+          body2 += "(?:.*/)?";
+          i2 += 2;
+        } else {
+          body2 += ".*";
+          i2 += 1;
+        }
+      } else body2 += "[^/]*";
+    } else if (c === "?") body2 += "[^/]";
+    else if (c === "[" || c === "\\") return null;
+    else body2 += c.replace(/[.+^${}()|]/g, "\\$&");
+  }
+  return body2;
+}
+function parseGitignore(text, base = "") {
+  const rules = [];
+  for (const raw of text.split(/\r?\n/).slice(0, MOST_LINES)) {
+    let line = raw.replace(/\s+$/, "");
+    if (!line || line.startsWith("#") || line.length > MOST_LENGTH) continue;
+    const negate = line.startsWith("!");
+    if (negate) line = line.slice(1);
+    const dirOnly = line.endsWith("/");
+    if (dirOnly) line = line.slice(0, -1);
+    const anchored = line.includes("/");
+    line = line.replace(/^\//, "");
+    const body2 = toRegex(line);
+    if (body2 === null || body2 === "") continue;
+    rules.push({ negate, dirOnly, base, regex: new RegExp(anchored ? `^${body2}$` : `(?:^|/)${body2}$`) });
+  }
+  return rules;
+}
+function isIgnored(rules, path, isDirectory) {
+  let ignored = false;
+  for (const rule of rules) {
+    if (rule.dirOnly && !isDirectory) continue;
+    if (rule.base && !path.startsWith(`${rule.base}/`)) continue;
+    const local = rule.base ? path.slice(rule.base.length + 1) : path;
+    if (rule.regex.test(local)) ignored = !rule.negate;
+  }
+  return ignored;
+}
+
 // src/languages.js
 var READABLE = {
   ".cs": { language: "c_sharp", reader: "csharp" },
@@ -4332,17 +4383,39 @@ var READERS = { csharp: readCSharp, typescript: readTypeScript, python: readPyth
 var CONTAINERS = /* @__PURE__ */ new Set(["src", "source", "lib", "libs", "packages", "apps", "app", "services", "modules", "projects"]);
 var GENERATED_FILE = ".codetree/generated.json";
 var OVERRIDE_FILE = "codetree.json";
-function walk2(root, relative, found, counts) {
+function looksBundled(source) {
+  if (source.length < 2e4) return false;
+  const lines = source.split(/\r?\n/);
+  return source.length / lines.length > 200 || lines.some((l) => l.length > 1e4);
+}
+function walk2(root, relative, found, counts, inherited, useGitignore) {
+  let rules = inherited;
+  if (useGitignore) {
+    try {
+      const file = join(root, relative, ".gitignore");
+      if (lstatSync(file).isFile() && lstatSync(file).size < 2e5) rules = [...inherited, ...parseGitignore(readFileSync2(file, "utf8"), relative)];
+    } catch {
+    }
+  }
   for (const entry of readdirSync(join(root, relative), { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : 1)) {
     const path = relative ? `${relative}/${entry.name}` : entry.name;
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
-      if (!SKIP_FOLDERS.has(entry.name) && !entry.name.startsWith(".")) walk2(root, path, found, counts);
+      if (SKIP_FOLDERS.has(entry.name) || entry.name.startsWith(".")) continue;
+      if (isIgnored(rules, path, true)) {
+        counts.ignored++;
+        continue;
+      }
+      walk2(root, path, found, counts, rules, useGitignore);
       continue;
     }
     if (!entry.isFile()) continue;
     const lower = entry.name.toLowerCase();
     const extension = extname(lower);
+    if (rules.length && isIgnored(rules, path, false) && (READABLE[extension] || UNSUPPORTED[extension])) {
+      counts.ignored++;
+      continue;
+    }
     if (READABLE[extension]) {
       if (GENERATED.some((end) => lower.endsWith(end))) {
         counts.generated++;
@@ -4393,16 +4466,22 @@ function mergePartials(entries) {
   }
   return merged;
 }
-async function scan(folder2) {
+async function scan(folder2, { gitignore = true } = {}) {
   const root = resolve(folder2);
   const found = [];
-  const counts = { languages: {}, generated: 0, tooBig: 0 };
-  walk2(root, "", found, counts);
+  const counts = { languages: {}, generated: 0, tooBig: 0, ignored: 0 };
+  walk2(root, "", found, counts, [], gitignore);
   const override = readOverride(root);
   const classes = [];
+  let read = 0;
   for (const { path, extension } of found) {
     const { language, reader } = READABLE[extension];
     const source = readFileSync2(join(root, path), "utf8").replace(/^\uFEFF/, "");
+    if (looksBundled(source)) {
+      counts.generated++;
+      continue;
+    }
+    read++;
     const tree = (await use(language)).parse(source);
     const entries = READERS[reader](tree.rootNode, source, path);
     tree.delete();
@@ -4421,7 +4500,7 @@ async function scan(folder2) {
   const model = {
     version: 1,
     root: override.name ?? basename(root),
-    files: found.length,
+    files: read,
     tiles,
     classes: classes.map((c) => ({
       id: c.id,
@@ -4444,7 +4523,7 @@ async function scan(folder2) {
         generated: false
       }))
     })),
-    skipped: { languages: counts.languages, generated: counts.generated, tooBig: counts.tooBig }
+    skipped: { languages: counts.languages, generated: counts.generated, tooBig: counts.tooBig, ignored: counts.ignored }
   };
   const items = [];
   for (const c of classes) {
@@ -4587,7 +4666,7 @@ var VIEWER_HTML = `<!doctype html>
 </html>
 `;
 var VIEWER_CSS = ':root { --bg: #fafafa; --surface: #fff; --text: #1f2328; --muted: #656d76; --border: #d8dee4; --brand: #0969da; --warn: #9a6700; --ok: #1a7f37; }\n@media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --surface: #161b22; --text: #e6edf3; --muted: #8b949e; --border: #30363d; --brand: #58a6ff; --warn: #d29922; --ok: #3fb950; } }\n* { box-sizing: border-box; }\nbody { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }\nheader { position: sticky; top: 0; z-index: 1; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }\nheader h1 { font-size: 17px; margin: 0; }\n#search { flex: 1; min-width: 220px; max-width: 520px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }\nmain { max-width: 1100px; margin: 0 auto; padding: 20px; }\na { color: var(--brand); text-decoration: none; } a:hover { text-decoration: underline; }\ncode { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }\n.crumbs { margin-bottom: 8px; }\n.lead { color: var(--muted); }\n.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }\n.tile { display: block; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); }\n.tile:hover { border-color: var(--brand); text-decoration: none; }\n.tile h2 { margin: 0 0 4px; font-size: 16px; } .tile p { margin: 2px 0; color: var(--muted); font-size: 13px; }\n.tile .gap { color: var(--warn); } .tile .ok { color: var(--ok); }\n.rows { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }\n.rows li { display: grid; grid-template-columns: minmax(150px, 260px) 80px 1fr auto; gap: 4px 12px; align-items: baseline; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }\n.name { font-weight: 600; overflow-wrap: anywhere; } .kind, .meta { color: var(--muted); font-size: 13px; }\n.none { color: var(--muted); font-style: italic; }\n.badge { margin-left: 6px; padding: 0 6px; border: 1px solid var(--warn); border-radius: 10px; color: var(--warn); font-size: 12px; font-style: normal; }\n.toggle { display: inline-block; margin: 6px 0; font-size: 13px; color: var(--muted); }\n.skipped { color: var(--muted); font-size: 13px; }\n@media (max-width: 720px) { .rows li { grid-template-columns: 1fr; } }\n.members li { grid-template-columns: minmax(150px, 260px) 80px 1fr; }\n.members .meta { grid-column: 2 / -1; }\n';
-var VIEWER_JS = "// The viewer's script. It runs in the browser from the one HTML file, reads the tree embedded in that file and nothing else, and draws only with textContent\n// (no innerHTML), so no text from the scanned code is ever treated as markup.\n(function () {\n  const data = JSON.parse(document.getElementById('codetree-data').textContent);\n  const app = document.getElementById('app');\n  const search = document.getElementById('search');\n  const classById = new Map(data.classes.map(c => [c.id, c]));\n  const ORDER = ['class', 'interface', 'struct', 'record', 'enum', 'module'];\n  const state = { missingOnly: false };\n\n  function el(tag, attrs, ...kids) {\n    const node = document.createElement(tag);\n    for (const [k, v] of Object.entries(attrs || {})) {\n      if (k === 'class') node.className = v;\n      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);\n      else if (v !== false && v != null) node.setAttribute(k, v === true ? '' : v);\n    }\n    for (const kid of kids.flat()) if (kid != null && kid !== false) node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));\n    return node;\n  }\n  const link = (text, hash, cls) => el('a', { href: hash, class: cls }, text);\n  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;\n  const noText = () => el('span', { class: 'none' }, 'no description yet');\n  const description = (item, kind) => (kind === 'module' ? el('span', { class: 'none' }, 'the functions of this file') : item.summary ? el('span', null, item.summary) : noText());\n  const badge = item => (item.generated ? el('span', { class: 'badge', title: 'Written by an agent: read it, then keep it with: codetree describe --accept' }, 'generated') : null);\n\n  function counts(c) {\n    const missing = c.members.filter(m => !m.summary).length + (c.summary || c.kind === 'module' ? 0 : 1);\n    return { members: c.members.length, missing };\n  }\n\n  function crumbs(parts) {\n    return el('nav', { class: 'crumbs', 'aria-label': 'Where you are' }, parts.flatMap((p, i) => [i ? el('span', { 'aria-hidden': 'true' }, ' \u203A ') : null, p.hash ? link(p.text, p.hash) : el('strong', null, p.text)]));\n  }\n\n  function toggle() {\n    return el('label', { class: 'toggle' }, el('input', { type: 'checkbox', checked: state.missingOnly, onchange: e => { state.missingOnly = e.target.checked; render(); } }), ' Show only what has no description');\n  }\n\n  function home() {\n    const total = data.classes.length;\n    const missing = data.classes.reduce((n, c) => n + counts(c).missing, 0);\n    return [\n      el('p', { class: 'lead' }, `${plural(data.tiles.length, 'area', 'areas')}, ${plural(total, 'class or file', 'classes and files')}, ${plural(missing, 'item has', 'items have')} no description yet.`),\n      el('div', { class: 'grid' }, data.tiles.map(t => {\n        const classes = t.classes.map(id => classById.get(id));\n        const m = classes.reduce((n, c) => n + counts(c).members, 0);\n        const gap = classes.reduce((n, c) => n + counts(c).missing, 0);\n        return el('a', { class: 'tile', href: `#/tile/${encodeURIComponent(t.id)}` }, el('h2', null, t.name), el('p', null, `${plural(classes.length, 'class or file', 'classes and files')} \xB7 ${plural(m, 'member', 'members')}`), el('p', { class: gap ? 'gap' : 'ok' }, gap ? `${gap} without a description` : 'all described'));\n      })),\n    ];\n  }\n\n  function tile(id) {\n    const t = data.tiles.find(x => x.id === id);\n    if (!t) return notFound();\n    const classes = t.classes.map(i => classById.get(i)).sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || a.name.localeCompare(b.name));\n    const shown = classes.filter(c => !state.missingOnly || counts(c).missing > 0);\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: t.name }]), toggle(),\n      el('ul', { class: 'rows' }, shown.map(c => el('li', null, link(c.name, `#/class/${encodeURIComponent(c.id)}`, 'name'), el('span', { class: 'kind' }, c.kind), el('span', { class: 'what' }, description(c, c.kind), badge(c)), el('span', { class: 'meta' }, plural(c.members.length, 'member', 'members'))))),\n      shown.length ? null : el('p', { class: 'none' }, 'Nothing to show.')];\n  }\n\n  function classView(id) {\n    const c = classById.get(id);\n    if (!c) return notFound();\n    const t = data.tiles.find(x => x.classes.includes(c.id));\n    const members = c.members.filter(m => !state.missingOnly || !m.summary);\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: t.name, hash: `#/tile/${encodeURIComponent(t.id)}` }, { text: c.name }]),\n      el('p', { class: 'where' }, el('span', { class: 'kind' }, c.kind), c.namespace ? ` ${c.namespace} \xB7 ` : ' ', el('code', null, `${c.file}:${c.line}`)),\n      c.signature ? el('p', null, el('code', null, c.signature)) : null,\n      el('p', { class: 'lead' }, description(c, c.kind), badge(c)),\n      toggle(),\n      el('ul', { class: 'rows members' }, members.map(m => el('li', null, el('span', { class: 'name' }, m.name), el('span', { class: 'kind' }, m.kind), el('span', { class: 'what' }, description(m), badge(m), el('br'), el('code', null, m.signature)), el('span', { class: 'meta' }, el('code', null, `${m.file ?? c.file}:${m.line}`))))),\n      members.length ? null : el('p', { class: 'none' }, 'Nothing to show.')];\n  }\n\n  function results(query) {\n    const words = query.toLowerCase().split(/\\s+/).filter(Boolean);\n    const hits = [];\n    const matches = (...texts) => { const all = texts.join(' ').toLowerCase(); return words.every(w => all.includes(w)); };\n    for (const c of data.classes) {\n      if (matches(c.name, c.summary, c.file, c.kind)) hits.push({ c, text: c.name, kind: c.kind, summary: c.summary, line: c.line });\n      for (const m of c.members) if (matches(m.name, m.summary, m.signature, c.name)) hits.push({ c, text: `${c.name}.${m.name}`, kind: m.kind, summary: m.summary, line: m.line });\n    }\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: `Search: ${query}` }]),\n      el('p', { class: 'lead' }, `${plural(hits.length, 'result', 'results')}${hits.length > 200 ? ', the first 200 shown' : ''}.`),\n      el('ul', { class: 'rows' }, hits.slice(0, 200).map(h => el('li', null, link(h.text, `#/class/${encodeURIComponent(h.c.id)}`, 'name'), el('span', { class: 'kind' }, h.kind), el('span', { class: 'what' }, h.summary || noText()), el('span', { class: 'meta' }, el('code', null, `${h.c.file}:${h.line}`)))))];\n  }\n\n  function notFound() { return [el('p', { class: 'none' }, 'That is not in this tree.'), link('Back to all areas', '#/')]; }\n\n  function footer() {\n    const langs = Object.entries(data.skipped.languages);\n    const notes = [];\n    if (langs.length) notes.push(`Skipped files in unsupported languages: ${langs.map(([l, n]) => `${l} ${n}`).join(', ')}.`);\n    if (data.skipped.generated) notes.push(`Skipped ${plural(data.skipped.generated, 'generated file', 'generated files')}.`);\n    if (data.skipped.tooBig) notes.push(`Skipped ${plural(data.skipped.tooBig, 'file', 'files')} over 1 MB.`);\n    return notes.map(n => el('p', { class: 'skipped' }, n));\n  }\n\n  function render() {\n    const [kind, ...rest] = location.hash.replace(/^#\\/?/, '').split('/');\n    const value = decodeURIComponent(rest.join('/'));\n    const body = kind === 'tile' ? tile(value) : kind === 'class' ? classView(value) : kind === 'search' ? results(value) : home();\n    app.replaceChildren(...body.flat().filter(Boolean), ...footer());\n    window.scrollTo(0, 0);\n  }\n\n  search.addEventListener('input', () => { location.hash = search.value.trim() ? `#/search/${encodeURIComponent(search.value.trim())}` : '#/'; });\n  window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/search/')) search.value = ''; render(); });\n  document.getElementById('title').textContent = `Code tree \xB7 ${data.root}`;\n  render();\n})();\n";
+var VIEWER_JS = "// The viewer's script. It runs in the browser from the one HTML file, reads the tree embedded in that file and nothing else, and draws only with textContent\n// (no innerHTML), so no text from the scanned code is ever treated as markup.\n(function () {\n  const data = JSON.parse(document.getElementById('codetree-data').textContent);\n  const app = document.getElementById('app');\n  const search = document.getElementById('search');\n  const classById = new Map(data.classes.map(c => [c.id, c]));\n  const ORDER = ['class', 'interface', 'struct', 'record', 'enum', 'module'];\n  const state = { missingOnly: false };\n\n  function el(tag, attrs, ...kids) {\n    const node = document.createElement(tag);\n    for (const [k, v] of Object.entries(attrs || {})) {\n      if (k === 'class') node.className = v;\n      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);\n      else if (v !== false && v != null) node.setAttribute(k, v === true ? '' : v);\n    }\n    for (const kid of kids.flat()) if (kid != null && kid !== false) node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));\n    return node;\n  }\n  const link = (text, hash, cls) => el('a', { href: hash, class: cls }, text);\n  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;\n  const noText = () => el('span', { class: 'none' }, 'no description yet');\n  const description = (item, kind) => (kind === 'module' ? el('span', { class: 'none' }, 'the functions of this file') : item.summary ? el('span', null, item.summary) : noText());\n  const badge = item => (item.generated ? el('span', { class: 'badge', title: 'Written by an agent: read it, then keep it with: codetree describe --accept' }, 'generated') : null);\n\n  function counts(c) {\n    const missing = c.members.filter(m => !m.summary).length + (c.summary || c.kind === 'module' ? 0 : 1);\n    return { members: c.members.length, missing };\n  }\n\n  function crumbs(parts) {\n    return el('nav', { class: 'crumbs', 'aria-label': 'Where you are' }, parts.flatMap((p, i) => [i ? el('span', { 'aria-hidden': 'true' }, ' \u203A ') : null, p.hash ? link(p.text, p.hash) : el('strong', null, p.text)]));\n  }\n\n  function toggle() {\n    return el('label', { class: 'toggle' }, el('input', { type: 'checkbox', checked: state.missingOnly, onchange: e => { state.missingOnly = e.target.checked; render(); } }), ' Show only what has no description');\n  }\n\n  function home() {\n    const total = data.classes.length;\n    const missing = data.classes.reduce((n, c) => n + counts(c).missing, 0);\n    return [\n      el('p', { class: 'lead' }, `${plural(data.tiles.length, 'area', 'areas')}, ${plural(total, 'class or file', 'classes and files')}, ${plural(missing, 'item has', 'items have')} no description yet.`),\n      el('div', { class: 'grid' }, data.tiles.map(t => {\n        const classes = t.classes.map(id => classById.get(id));\n        const m = classes.reduce((n, c) => n + counts(c).members, 0);\n        const gap = classes.reduce((n, c) => n + counts(c).missing, 0);\n        return el('a', { class: 'tile', href: `#/tile/${encodeURIComponent(t.id)}` }, el('h2', null, t.name), el('p', null, `${plural(classes.length, 'class or file', 'classes and files')} \xB7 ${plural(m, 'member', 'members')}`), el('p', { class: gap ? 'gap' : 'ok' }, gap ? `${gap} without a description` : 'all described'));\n      })),\n    ];\n  }\n\n  function tile(id) {\n    const t = data.tiles.find(x => x.id === id);\n    if (!t) return notFound();\n    const classes = t.classes.map(i => classById.get(i)).sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || a.name.localeCompare(b.name));\n    const shown = classes.filter(c => !state.missingOnly || counts(c).missing > 0);\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: t.name }]), toggle(),\n      el('ul', { class: 'rows' }, shown.map(c => el('li', null, link(c.name, `#/class/${encodeURIComponent(c.id)}`, 'name'), el('span', { class: 'kind' }, c.kind), el('span', { class: 'what' }, description(c, c.kind), badge(c)), el('span', { class: 'meta' }, plural(c.members.length, 'member', 'members'))))),\n      shown.length ? null : el('p', { class: 'none' }, 'Nothing to show.')];\n  }\n\n  function classView(id) {\n    const c = classById.get(id);\n    if (!c) return notFound();\n    const t = data.tiles.find(x => x.classes.includes(c.id));\n    const members = c.members.filter(m => !state.missingOnly || !m.summary);\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: t.name, hash: `#/tile/${encodeURIComponent(t.id)}` }, { text: c.name }]),\n      el('p', { class: 'where' }, el('span', { class: 'kind' }, c.kind), c.namespace ? ` ${c.namespace} \xB7 ` : ' ', el('code', null, `${c.file}:${c.line}`)),\n      c.signature ? el('p', null, el('code', null, c.signature)) : null,\n      el('p', { class: 'lead' }, description(c, c.kind), badge(c)),\n      toggle(),\n      el('ul', { class: 'rows members' }, members.map(m => el('li', null, el('span', { class: 'name' }, m.name), el('span', { class: 'kind' }, m.kind), el('span', { class: 'what' }, description(m), badge(m), el('br'), el('code', null, m.signature)), el('span', { class: 'meta' }, el('code', null, `${m.file ?? c.file}:${m.line}`))))),\n      members.length ? null : el('p', { class: 'none' }, 'Nothing to show.')];\n  }\n\n  function results(query) {\n    const words = query.toLowerCase().split(/\\s+/).filter(Boolean);\n    const hits = [];\n    const matches = (...texts) => { const all = texts.join(' ').toLowerCase(); return words.every(w => all.includes(w)); };\n    for (const c of data.classes) {\n      if (matches(c.name, c.summary, c.file, c.kind)) hits.push({ c, text: c.name, kind: c.kind, summary: c.summary, line: c.line });\n      for (const m of c.members) if (matches(m.name, m.summary, m.signature, c.name)) hits.push({ c, text: `${c.name}.${m.name}`, kind: m.kind, summary: m.summary, line: m.line });\n    }\n    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: `Search: ${query}` }]),\n      el('p', { class: 'lead' }, `${plural(hits.length, 'result', 'results')}${hits.length > 200 ? ', the first 200 shown' : ''}.`),\n      el('ul', { class: 'rows' }, hits.slice(0, 200).map(h => el('li', null, link(h.text, `#/class/${encodeURIComponent(h.c.id)}`, 'name'), el('span', { class: 'kind' }, h.kind), el('span', { class: 'what' }, h.summary || noText()), el('span', { class: 'meta' }, el('code', null, `${h.c.file}:${h.line}`)))))];\n  }\n\n  function notFound() { return [el('p', { class: 'none' }, 'That is not in this tree.'), link('Back to all areas', '#/')]; }\n\n  function footer() {\n    const langs = Object.entries(data.skipped.languages);\n    const notes = [];\n    if (langs.length) notes.push(`Skipped files in unsupported languages: ${langs.map(([l, n]) => `${l} ${n}`).join(', ')}.`);\n    if (data.skipped.generated) notes.push(`Skipped ${plural(data.skipped.generated, 'generated or minified file', 'generated or minified files')}.`);\n    if (data.skipped.ignored) notes.push(`Left out ${plural(data.skipped.ignored, 'file or folder', 'files and folders')} that the project's .gitignore ignores.`);\n    if (data.skipped.tooBig) notes.push(`Skipped ${plural(data.skipped.tooBig, 'file', 'files')} over 1 MB.`);\n    return notes.map(n => el('p', { class: 'skipped' }, n));\n  }\n\n  function render() {\n    const [kind, ...rest] = location.hash.replace(/^#\\/?/, '').split('/');\n    const value = decodeURIComponent(rest.join('/'));\n    const body = kind === 'tile' ? tile(value) : kind === 'class' ? classView(value) : kind === 'search' ? results(value) : home();\n    app.replaceChildren(...body.flat().filter(Boolean), ...footer());\n    window.scrollTo(0, 0);\n  }\n\n  search.addEventListener('input', () => { location.hash = search.value.trim() ? `#/search/${encodeURIComponent(search.value.trim())}` : '#/'; });\n  window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/search/')) search.value = ''; render(); });\n  document.getElementById('title').textContent = `Code tree \xB7 ${data.root}`;\n  render();\n})();\n";
 
 // src/html.js
 function embed(model) {
@@ -4602,8 +4681,9 @@ function renderHtml(model) {
 var VERSION = "0.1.0";
 var HELP = `codetree ${VERSION}: a browsable code tree of a C#, TypeScript/JavaScript or Python project.
 
-  codetree scan [folder] [--out code-tree.html] [--json code-tree.json]
+  codetree scan [folder] [--out code-tree.html] [--json code-tree.json] [--no-gitignore]
       Reads the folder (default: here) and writes one HTML file to open in a browser.
+      What the project's .gitignore ignores, and minified or bundled files, are left out.
   codetree describe [folder] --list [--out todo.json]
       Lists what has no description, with its code, for an agent to describe.
   codetree describe [folder] --apply descriptions.json [--dry-run]
@@ -4643,7 +4723,8 @@ function summary(model) {
   lines.push(`${without} classes, files or members have no description yet.`);
   const langs = Object.entries(model.skipped.languages);
   if (langs.length) lines.push(`Skipped files in unsupported languages: ${langs.map(([l, n]) => `${l} ${n}`).join(", ")}.`);
-  if (model.skipped.generated) lines.push(`Skipped ${model.skipped.generated} generated files.`);
+  if (model.skipped.generated) lines.push(`Skipped ${model.skipped.generated} generated or minified files.`);
+  if (model.skipped.ignored) lines.push(`Left out ${model.skipped.ignored} files and folders the project's .gitignore ignores (--no-gitignore reads them too).`);
   return lines;
 }
 async function run2(argv, io = { out: (s) => process.stdout.write(s + "\n"), err: (s) => process.stderr.write(s + "\n") }) {
@@ -4664,7 +4745,7 @@ async function run2(argv, io = { out: (s) => process.stdout.write(s + "\n"), err
   }
   try {
     if (command === "scan") {
-      const { model } = await scan(root);
+      const { model } = await scan(root, { gitignore: !flags2["no-gitignore"] });
       const htmlPath = resolve3(flags2.out ?? join3(root, "code-tree.html"));
       write(htmlPath, renderHtml(model), flags2.force);
       if (flags2.json) write(resolve3(flags2.json), `${JSON.stringify(model, null, 2)}
@@ -4674,7 +4755,7 @@ async function run2(argv, io = { out: (s) => process.stdout.write(s + "\n"), err
       return 0;
     }
     if (command === "describe") {
-      const { items } = await scan(root);
+      const { items } = await scan(root, { gitignore: !flags2["no-gitignore"] });
       if (flags2.accept) {
         io.out(`Kept ${accept(root)} descriptions: they are no longer marked generated.`);
         return 0;

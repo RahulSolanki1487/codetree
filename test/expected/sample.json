@@ -1,7 +1,7 @@
 {
   "version": 1,
   "root": "sample",
-  "files": 6,
+  "files": 10,
   "tiles": [
     {
       "id": "api",
@@ -22,6 +22,13 @@
       ]
     },
     {
+      "id": "ignored",
+      "name": "ignored",
+      "classes": [
+        "ignored/Hidden.cs#Hidden"
+      ]
+    },
+    {
       "id": "tools",
       "name": "tools",
       "classes": [
@@ -33,6 +40,9 @@
       "id": "web",
       "name": "web",
       "classes": [
+        "web/src/keep.local.ts#KeepLocal",
+        "web/src/nested.ts#Nested",
+        "web/src/secret.local.ts#SecretLocal",
         "web/src/store.ts#Store",
         "web/src/store.ts#Api",
         "web/src/store.ts#store",
@@ -222,6 +232,27 @@
       ]
     },
     {
+      "id": "ignored/Hidden.cs#Hidden",
+      "name": "Hidden",
+      "kind": "class",
+      "file": "ignored/Hidden.cs",
+      "line": 1,
+      "language": "c_sharp",
+      "signature": "public class Hidden",
+      "summary": "",
+      "generated": false,
+      "members": [
+        {
+          "name": "Never",
+          "kind": "method",
+          "signature": "public void Never()",
+          "line": 1,
+          "summary": "",
+          "generated": false
+        }
+      ]
+    },
+    {
       "id": "tools/helpers.py#Report",
       "name": "Report",
       "kind": "class",
@@ -290,6 +321,69 @@
           "kind": "function",
           "signature": "def one_line()",
           "line": 36,
+          "summary": "",
+          "generated": false
+        }
+      ]
+    },
+    {
+      "id": "web/src/keep.local.ts#KeepLocal",
+      "name": "KeepLocal",
+      "kind": "class",
+      "file": "web/src/keep.local.ts",
+      "line": 1,
+      "language": "typescript",
+      "signature": "class KeepLocal",
+      "summary": "",
+      "generated": false,
+      "members": [
+        {
+          "name": "run",
+          "kind": "method",
+          "signature": "run(): void",
+          "line": 1,
+          "summary": "",
+          "generated": false
+        }
+      ]
+    },
+    {
+      "id": "web/src/nested.ts#Nested",
+      "name": "Nested",
+      "kind": "class",
+      "file": "web/src/nested.ts",
+      "line": 1,
+      "language": "typescript",
+      "signature": "class Nested",
+      "summary": "",
+      "generated": false,
+      "members": [
+        {
+          "name": "run",
+          "kind": "method",
+          "signature": "run(): void",
+          "line": 1,
+          "summary": "",
+          "generated": false
+        }
+      ]
+    },
+    {
+      "id": "web/src/secret.local.ts#SecretLocal",
+      "name": "SecretLocal",
+      "kind": "class",
+      "file": "web/src/secret.local.ts",
+      "line": 1,
+      "language": "typescript",
+      "signature": "class SecretLocal",
+      "summary": "",
+      "generated": false,
+      "members": [
+        {
+          "name": "run",
+          "kind": "method",
+          "signature": "run(): void",
+          "line": 1,
           "summary": "",
           "generated": false
         }
@@ -445,7 +539,8 @@
     "languages": {
       "Go": 1
     },
-    "generated": 1,
-    "tooBig": 0
+    "generated": 2,
+    "tooBig": 0,
+    "ignored": 0
   }
 }
