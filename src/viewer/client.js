@@ -8,6 +8,7 @@
   const features = data.features ?? [];
   const ORDER = ['class', 'interface', 'struct', 'record', 'enum', 'module'];
   const VERB_ORDER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  const AREA_HUES = [265, 335, 205, 20]; // violet, pink, blue, orange
   const state = { missingOnly: false, text: '', verbs: new Set() };
 
   const dark = window.matchMedia('(prefers-color-scheme: dark)');
@@ -27,7 +28,7 @@
   }
   const link = (text, hash, cls) => el('a', { href: hash, class: cls }, text);
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return 190 + (h % 40); }; // blues and teals only
+  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return h > 45 && h < 135 ? h + 90 : h; }; // no yellow-greens: white text stays readable
   const initials = name => (name.replace(/Controller$/, '').match(/[A-Z][a-z0-9]*/g) ?? [name]).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const noText = () => el('span', { class: 'text-body-secondary fst-italic' }, 'no description yet');
   const description = (item, kind) => (kind === 'module' ? el('span', { class: 'text-body-secondary fst-italic' }, 'the functions of this file') : item.summary ? el('span', null, item.summary) : noText());
@@ -69,18 +70,18 @@
     const endpoints = features.flatMap(f => f.endpoints);
     const members = data.classes.reduce((n, c) => n + c.members.length, 0);
     return el('div', { class: 'row row-cols-2 row-cols-lg-4 g-3 mb-4' }, [
-      stat(features.length, 'controllers', 215), stat(endpoints.length, 'endpoints', 215),
-      stat(endpoints.filter(e => e.callers.length).length, 'used by the front end', 215), stat(`${data.classes.length} · ${members}`, 'classes · members', 215)]);
+      stat(features.length, 'controllers', 265), stat(endpoints.length, 'endpoints', 330),
+      stat(endpoints.filter(e => e.callers.length).length, 'used by the front end', 150), stat(`${data.classes.length} · ${members}`, 'classes · members', 25)]);
   }
 
   function areaTiles(selectedId) {
-    return el('div', { class: 'row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mb-4' }, data.tiles.map(t => {
+    return el('div', { class: 'row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mb-4' }, data.tiles.map((t, index) => {
       const classes = t.classes.map(id => classById.get(id));
       const gap = classes.reduce((n, c) => n + counts(c).missing, 0);
       const items = classes.reduce((n, c) => n + c.members.length + 1, 0);
       const done = items ? Math.round(100 * (1 - gap / items)) : 100;
       const own = features.filter(f => t.classes.includes(f.class)).length;
-      return el('div', { class: 'col' }, el('a', { href: `#/tile/${encodeURIComponent(t.id)}`, class: `area${t.id === selectedId ? ' selected' : ''}`, style: `--h:${hueOf(t.id)}` },
+      return el('div', { class: 'col' }, el('a', { href: `#/tile/${encodeURIComponent(t.id)}`, class: `area${t.id === selectedId ? ' selected' : ''}`, style: `--h:${AREA_HUES[index % AREA_HUES.length]}` },
         el('div', { class: 'area-icon' }, icon(t.name)),
         el('h2', { class: 'h4 mb-1' }, t.name),
         el('p', { class: 'mb-2 opacity-75' }, plural(classes.length, 'class or file', 'classes and files'), own ? ` · ${plural(own, 'controller', 'controllers')}` : ''),
