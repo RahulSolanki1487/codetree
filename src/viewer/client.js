@@ -187,7 +187,7 @@
     const [kind, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
     const value = decodeURIComponent(rest.join('/'));
     const body = kind === 'tile' ? areaView(value) : kind === 'class' ? classView(value) : kind === 'feature' ? feature(value) : kind === 'search' ? results(value) : overview();
-    app.replaceChildren(...body.flat().filter(Boolean), el('hr'), ...footer());
+    app.replaceChildren(...body.flat(Infinity).filter(Boolean), el('hr'), ...footer());
     window.scrollTo(0, 0);
   }
 
