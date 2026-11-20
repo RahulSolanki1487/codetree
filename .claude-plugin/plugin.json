@@ -1,0 +1,11 @@
+{
+  "name": "codetree",
+  "displayName": "Code Tree",
+  "version": "0.1.0",
+  "description": "Turns a C#, TypeScript/JavaScript or Python project into one browsable HTML file (areas, classes, members, descriptions, search), and fills in missing descriptions as a diff you review.",
+  "author": { "name": "codetree contributors" },
+  "homepage": "https://github.com/RahulSolanki1487/codetree",
+  "repository": "https://github.com/RahulSolanki1487/codetree",
+  "license": "MIT",
+  "keywords": ["code-map", "documentation", "csharp", "typescript", "python", "onboarding"]
+}

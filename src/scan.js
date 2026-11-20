@@ -1,0 +1,139 @@
+// Walks a folder, reads every supported file, and builds the code tree: classes with members, grouped into tiles. Nothing in the folder is run, built or loaded;
+// files are only read as text, and links are never followed.
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { basename, extname, join, resolve } from 'node:path';
+import { use } from './grammars.js';
+import { GENERATED, MOST_BYTES, READABLE, SKIP_FOLDERS, UNSUPPORTED } from './languages.js';
+import { readCSharp } from './readers/csharp.js';
+import { readPython } from './readers/python.js';
+import { readTypeScript } from './readers/typescript.js';
+
+const READERS = { csharp: readCSharp, typescript: readTypeScript, python: readPython };
+/** Folders that only hold projects: a tile is the project inside, not the container. */
+const CONTAINERS = new Set(['src', 'source', 'lib', 'libs', 'packages', 'apps', 'app', 'services', 'modules', 'projects']);
+export const GENERATED_FILE = '.codetree/generated.json';
+export const OVERRIDE_FILE = 'codetree.json';
+
+function walk(root, relative, found, counts) {
+  for (const entry of readdirSync(join(root, relative), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const path = relative ? `${relative}/${entry.name}` : entry.name;
+    if (entry.isSymbolicLink()) continue; // a link could lead out of the folder
+    if (entry.isDirectory()) {
+      if (!SKIP_FOLDERS.has(entry.name) && !entry.name.startsWith('.')) walk(root, path, found, counts);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const lower = entry.name.toLowerCase();
+    const extension = extname(lower);
+    if (READABLE[extension]) {
+      if (GENERATED.some(end => lower.endsWith(end))) { counts.generated++; continue; }
+      if (lstatSync(join(root, path)).size > MOST_BYTES) { counts.tooBig++; continue; }
+      found.push({ path, extension });
+    } else if (UNSUPPORTED[extension]) {
+      counts.languages[UNSUPPORTED[extension]] = (counts.languages[UNSUPPORTED[extension]] ?? 0) + 1;
+    }
+  }
+}
+
+/** The optional codetree.json at the project's root: a project name and tiles as { name: [folder prefixes] }. Anything else in it is ignored. */
+function readOverride(root) {
+  let data;
+  try { data = JSON.parse(readFileSync(join(root, OVERRIDE_FILE), 'utf8')); } catch { return { name: null, tiles: [] }; }
+  const text = value => (typeof value === 'string' && value.length > 0 && value.length <= 60 ? value : null);
+  const tiles = Object.entries(data?.tiles && typeof data.tiles === 'object' ? data.tiles : {})
+    .filter(([name, prefixes]) => text(name) && Array.isArray(prefixes))
+    .map(([name, prefixes]) => ({ name, prefixes: prefixes.filter(p => typeof p === 'string' && p.length <= 200).map(p => p.replace(/^\.?\/+|\/+$/g, '')) }));
+  return { name: text(data?.name), tiles };
+}
+
+function tileFor(file, override) {
+  for (const tile of override.tiles) if (tile.prefixes.some(p => file === p || file.startsWith(`${p}/`))) return tile.name;
+  const parts = file.split('/');
+  if (parts.length === 1) return '(root)';
+  return CONTAINERS.has(parts[0]) && parts.length > 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+}
+
+function mergePartials(entries) {
+  const merged = [];
+  const byKey = new Map();
+  for (const entry of entries) {
+    const key = entry.partial ? `${entry.namespace}|${entry.name}` : null;
+    const first = key && byKey.get(key);
+    if (first) {
+      first.members.push(...entry.members);
+      // The part that has the description speaks for the class (its file, line and place for a new comment).
+      if (!first.summary && entry.summary) Object.assign(first, { summary: entry.summary, hasComment: true, file: entry.file, line: entry.line, place: entry.place, signature: entry.signature, tile: entry.tile });
+      first.inherits ||= entry.inherits;
+      first.members.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line));
+    } else {
+      merged.push(entry);
+      if (key) byKey.set(key, entry);
+    }
+  }
+  return merged;
+}
+
+/** Reads the project. Returns the public tree (`model`) and, for the description step, every item with its position (`items`). */
+export async function scan(folder) {
+  const root = resolve(folder);
+  const found = [];
+  const counts = { languages: {}, generated: 0, tooBig: 0 };
+  walk(root, '', found, counts);
+  const override = readOverride(root);
+
+  const classes = [];
+  for (const { path, extension } of found) {
+    const { language, reader } = READABLE[extension];
+    const source = readFileSync(join(root, path), 'utf8').replace(/^\uFEFF/, '');
+    const tree = (await use(language)).parse(source);
+    const entries = READERS[reader](tree.rootNode, source, path);
+    tree.delete();
+    for (const entry of entries) {
+      for (const member of entry.members) member.file = path;
+      classes.push({ ...entry, file: path, language, tile: tileFor(path, override) });
+    }
+  }
+  classes.splice(0, classes.length, ...mergePartials(classes));
+
+  const seen = new Set();
+  for (const c of classes) {
+    c.id = seen.has(`${c.file}#${c.name}`) ? `${c.file}#${c.name}@${c.line}` : `${c.file}#${c.name}`;
+    seen.add(`${c.file}#${c.name}`);
+  }
+
+  const tiles = [...new Set(classes.map(c => c.tile))].sort().map(name => ({ id: name, name, classes: classes.filter(c => c.tile === name).map(c => c.id) }));
+  const model = {
+    version: 1,
+    root: override.name ?? basename(root),
+    files: found.length,
+    tiles,
+    classes: classes.map(c => ({
+      id: c.id, name: c.name, kind: c.kind, ...(c.namespace ? { namespace: c.namespace } : {}), file: c.file, line: c.line, language: c.language,
+      signature: c.signature, summary: c.summary, generated: false,
+      members: c.members.map(m => ({
+        name: m.name, kind: m.kind, signature: m.signature, line: m.line, ...(m.file !== c.file ? { file: m.file } : {}), summary: m.summary, generated: false,
+      })),
+    })),
+    skipped: { languages: counts.languages, generated: counts.generated, tooBig: counts.tooBig },
+  };
+
+  const items = [];
+  for (const c of classes) {
+    items.push({ id: `${c.file}:${c.line}`, file: c.file, line: c.line, name: c.name, kind: c.kind, signature: c.signature, summary: c.summary, inherits: c.inherits, place: c.place, language: c.language, owner: null });
+    for (const m of c.members) items.push({ id: `${m.file}:${m.line}`, file: m.file, line: m.line, name: m.name, kind: m.kind, signature: m.signature, summary: m.summary, inherits: m.inherits, place: m.place, language: c.language, owner: c.name });
+  }
+  markGenerated(root, model);
+  return { model, items, root };
+}
+
+/** Marks the descriptions an agent wrote (kept in .codetree/generated.json until a person accepts them) so the viewer says so. */
+export function markGenerated(root, model) {
+  let records = [];
+  try { records = JSON.parse(readFileSync(join(root, GENERATED_FILE), 'utf8')); } catch { return; }
+  const key = (file, name, text) => `${file}\u0000${name}\u0000${text}`;
+  const set = new Set(Array.isArray(records) ? records.map(r => key(r.file, r.name, r.text)) : []);
+  for (const c of model.classes) {
+    if (set.has(key(c.file, c.name, c.summary))) c.generated = true;
+    for (const m of c.members) if (set.has(key(m.file ?? c.file, m.name, m.summary))) m.generated = true;
+  }
+}
