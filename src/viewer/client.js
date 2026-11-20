@@ -5,6 +5,8 @@
   const app = document.getElementById('app');
   const search = document.getElementById('search');
   const classById = new Map(data.classes.map(c => [c.id, c]));
+  const features = data.features ?? [];
+  const VERB_ORDER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
   const ORDER = ['class', 'interface', 'struct', 'record', 'enum', 'module'];
   const state = { missingOnly: false };
 
@@ -42,13 +44,48 @@
     const missing = data.classes.reduce((n, c) => n + counts(c).missing, 0);
     return [
       el('p', { class: 'lead' }, `${plural(data.tiles.length, 'area', 'areas')}, ${plural(total, 'class or file', 'classes and files')}, ${plural(missing, 'item has', 'items have')} no description yet.`),
+      el('h2', { class: 'section' }, 'Areas (folders)'),
       el('div', { class: 'grid' }, data.tiles.map(t => {
         const classes = t.classes.map(id => classById.get(id));
         const m = classes.reduce((n, c) => n + counts(c).members, 0);
         const gap = classes.reduce((n, c) => n + counts(c).missing, 0);
         return el('a', { class: 'tile', href: `#/tile/${encodeURIComponent(t.id)}` }, el('h2', null, t.name), el('p', null, `${plural(classes.length, 'class or file', 'classes and files')} · ${plural(m, 'member', 'members')}`), el('p', { class: gap ? 'gap' : 'ok' }, gap ? `${gap} without a description` : 'all described'));
       })),
+      features.length ? featureTiles() : null,
     ];
+  }
+
+  function featureTiles() {
+    return [
+      el('h2', { class: 'section' }, 'Features (one per controller)'),
+      el('p', { class: 'lead' }, 'Each controller with the calls it answers, the classes it uses and the front-end functions that call it.'),
+      el('div', { class: 'grid' }, features.map(f => {
+        const callers = new Set(f.endpoints.flatMap(e => e.callers.map(c => c.class)));
+        return el('a', { class: 'tile', href: `#/feature/${encodeURIComponent(f.id)}` }, el('h2', null, f.name), el('p', null, el('code', null, f.route)),
+          el('p', null, `${plural(f.endpoints.length, 'endpoint', 'endpoints')} · called from ${plural(callers.size, 'front-end class', 'front-end classes')}`));
+      })),
+    ];
+  }
+
+  const classLink = (id, text) => (classById.has(id) ? link(text ?? classById.get(id).name, `#/class/${encodeURIComponent(id)}`) : text ?? id);
+
+  function feature(id) {
+    const f = features.find(x => x.id === id);
+    if (!f) return notFound();
+    const owner = classById.get(f.class);
+    const action = e => owner?.members.find(m => m.name === e.member && m.line === e.line) ?? owner?.members.find(m => m.name === e.member);
+    const endpoints = [...f.endpoints].sort((a, b) => a.path.localeCompare(b.path) || VERB_ORDER.indexOf(a.verb) - VERB_ORDER.indexOf(b.verb));
+    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: f.name }]),
+      el('p', { class: 'where' }, el('code', null, f.route), ' · handled by ', classLink(f.class), owner ? el('code', null, ` ${owner.file}:${owner.line}`) : null),
+      owner?.summary ? el('p', { class: 'lead' }, owner.summary, badge(owner)) : null,
+      f.uses.length ? el('p', null, 'Uses: ', f.uses.flatMap((u, i) => [i ? ', ' : null, classLink(u)])) : null,
+      el('ul', { class: 'rows endpoints' }, endpoints.map(e => {
+        const m = action(e);
+        return el('li', null, el('span', { class: 'name' }, el('span', { class: 'verb' }, e.verb), ' ', el('code', null, `/${e.path}`)), el('span', { class: 'kind' }, e.member),
+          el('span', { class: 'what' }, m?.summary ? m.summary : noText(), m ? badge(m) : null,
+            el('br'), e.callers.length ? el('span', { class: 'meta' }, 'Called from: ', e.callers.flatMap((c, i) => [i ? ', ' : null, classLink(c.class, `${classById.get(c.class)?.name ?? c.class}.${c.member}`)])) : el('span', { class: 'none' }, 'no front-end call found')),
+          el('span', { class: 'meta' }, el('code', null, `:${e.line}`)));
+      }))];
   }
 
   function tile(id) {
@@ -103,7 +140,7 @@
   function render() {
     const [kind, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
     const value = decodeURIComponent(rest.join('/'));
-    const body = kind === 'tile' ? tile(value) : kind === 'class' ? classView(value) : kind === 'search' ? results(value) : home();
+    const body = kind === 'tile' ? tile(value) : kind === 'class' ? classView(value) : kind === 'feature' ? feature(value) : kind === 'search' ? results(value) : home();
     app.replaceChildren(...body.flat().filter(Boolean), ...footer());
     window.scrollTo(0, 0);
   }

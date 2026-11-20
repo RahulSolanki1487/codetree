@@ -50,6 +50,8 @@ node scripts/codetree.mjs describe path/to/project --accept
 
 An optional `codetree.json` at the project's root renames areas: `{ "name": "My app", "tiles": { "Backend": ["src/Api", "src/Core"] } }`.
 
+**Features.** For a C# web project, the page also lists one feature per controller (its `[Route]` and `[HttpGet]`/`[HttpPost]`… attributes): the endpoints with their verb and full route, the classes the controller takes in, and the front-end functions (TypeScript/JavaScript) that call each endpoint, found by the `/api/...` text and the `get`/`post`/`put`/`patch`/`delete` call around it. Calls in test files, and addresses built from a variable base, are not matched. Nothing is guessed: an endpoint with no match says "no front-end call found".
+
 ## How it stays safe
 
 - **Nothing from the project runs.** Files are read as text and parsed with pinned tree-sitter grammars (WebAssembly) that ship in this repository; each is checked against a SHA-256 before it is loaded. Links are never followed.

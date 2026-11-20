@@ -35,6 +35,27 @@ export function indentOf(lines, row) {
   return (lines[row] ?? '').match(/^[ \t]*/)[0];
 }
 
+/** The request verb of the call a literal is an argument of (http.get(...), client.post(...)), or null when it is not one. */
+function verbOf(literal) {
+  for (let up = literal.parent; up; up = up.parent) {
+    if (up.type === 'call_expression') return /\.(get|post|put|delete|patch)$/.exec(up.childForFieldName('function')?.text ?? '')?.[1].toUpperCase() ?? null;
+    if (up.type === 'statement_block') return null;
+  }
+  return null;
+}
+
+/** The string literals under a node that look like a path (start with "/"), as { verb, path } with each ${...} written as {}: where a function sends requests. */
+export function pathsIn(node) {
+  const found = new Map();
+  for (const literal of node.descendantsOfType(['string', 'template_string'])) {
+    const text = literal.text.slice(1, -1).replace(/\$\{[^}]*\}/g, '{}');
+    if (!/^\/[\w{}\-./]*(?:\?.*)?$/.test(text) || text.length < 2) continue;
+    const call = { verb: verbOf(literal), path: text.split('?')[0] };
+    found.set(`${call.verb}|${call.path}`, call);
+  }
+  return [...found.values()];
+}
+
 /** A short description's first paragraph, in one line. */
 export function firstParagraph(text) {
   return collapse(text.trim().split(/\r?\n\s*\r?\n/)[0] ?? '');

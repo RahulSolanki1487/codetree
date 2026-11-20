@@ -2,6 +2,20 @@
 // A description is the /// <summary> XML comment; a /// <inheritdoc/> means "described elsewhere" and is not asked for.
 import { collapse, head, indentOf, leading } from './common.js';
 
+const VERBS = { HttpGet: 'GET', HttpPost: 'POST', HttpPut: 'PUT', HttpDelete: 'DELETE', HttpPatch: 'PATCH' };
+
+/** The routing attributes of a declaration: [Route("x")] gives a route, [HttpGet("y")] a verb and a path. Read from the attribute text only. */
+function routingOf(node) {
+  const found = {};
+  for (const list of node.children.filter(isAttributeList)) {
+    for (const m of list.text.matchAll(/\b(Route|Http(?:Get|Post|Put|Delete|Patch))\b(?:\s*\(\s*"([^"]*)")?/g)) {
+      if (m[1] === 'Route') found.route = m[2] ?? '';
+      else found.http = { verb: VERBS[m[1]], path: m[2] ?? '' };
+    }
+  }
+  return found;
+}
+
 const TYPES = {
   class_declaration: 'class', interface_declaration: 'interface', struct_declaration: 'struct', record_declaration: 'record',
   record_struct_declaration: 'record', enum_declaration: 'enum',
@@ -37,11 +51,17 @@ function memberOf(node, lines) {
   const signature = kind === 'property'
     ? head(node, ['accessor_list', 'arrow_expression_clause', '=', ';'], ['attribute_list'])
     : head(node, ['block', 'arrow_expression_clause', ';', 'constructor_initializer'], ['attribute_list']);
-  return { name, kind, signature, line: node.startPosition.row + 1, ...summaryOf(leading(node).comments), place: placeFor(node, lines) };
+  return { name, kind, signature, line: node.startPosition.row + 1, ...summaryOf(leading(node).comments), place: placeFor(node, lines), http: routingOf(node).http };
+}
+
+/** The grammar cannot read a primary constructor with a qualified generic parameter (A.B.IOptions<C>) and puts "Name(" in an error node: the name is there. */
+function nameOf(node) {
+  const lost = node.children.find(c => c.type === 'ERROR' && /^[A-Za-z_]\w*\s*\(/.test(c.text));
+  return lost ? /^[A-Za-z_]\w*/.exec(lost.text)[0] : node.childForFieldName('name')?.text ?? '';
 }
 
 function typeOf(node, lines, namespace, outer) {
-  const name = node.childForFieldName('name')?.text ?? '';
+  const name = nameOf(node);
   const kind = TYPES[node.type];
   const members = [];
   const nested = [];
@@ -54,7 +74,7 @@ function typeOf(node, lines, namespace, outer) {
   const entry = {
     name: outer ? `${outer}.${name}` : name, kind, namespace, signature, line: node.startPosition.row + 1,
     partial: node.children.some(c => c.type === 'modifier' && c.text === 'partial'),
-    ...summaryOf(leading(node).comments), place: placeFor(node, lines), members,
+    ...summaryOf(leading(node).comments), place: placeFor(node, lines), members, route: routingOf(node).route,
   };
   return [entry, ...nested];
 }

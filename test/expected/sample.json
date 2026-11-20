@@ -51,6 +51,7 @@
       ]
     }
   ],
+  "features": [],
   "classes": [
     {
       "id": "api/Services/UserService.cs#UserService",
