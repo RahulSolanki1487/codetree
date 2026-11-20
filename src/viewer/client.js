@@ -27,17 +27,17 @@
   }
   const link = (text, hash, cls) => el('a', { href: hash, class: cls }, text);
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return 195 + (h % 60); }; // blues, teals and indigos only
   const initials = name => (name.replace(/Controller$/, '').match(/[A-Z][a-z0-9]*/g) ?? [name]).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const noText = () => el('span', { class: 'text-body-secondary fst-italic' }, 'no description yet');
   const description = (item, kind) => (kind === 'module' ? el('span', { class: 'text-body-secondary fst-italic' }, 'the functions of this file') : item.summary ? el('span', null, item.summary) : noText());
-  const badge = item => (item.generated ? el('span', { class: 'badge rounded-pill text-bg-warning ms-2', title: 'Written by an agent: read it, then keep it with: codetree describe --accept' }, '✨ generated') : null);
+  const badge = item => (item.generated ? el('span', { class: 'tag-generated', title: 'Written by an agent: read it, then keep it with: codetree describe --accept' }, 'generated') : null);
   const code = text => el('code', { class: 'small text-break' }, text);
   const verbPill = (verb, extra) => el('span', { class: `verb verb-${verb}` }, verb, extra != null ? el('b', null, extra) : null);
   const kindPill = kind => el('span', { class: `kind kind-${kind}` }, kind);
   const tileOf = classId => data.tiles.find(t => t.classes.includes(classId));
   const classLink = (id, text) => (classById.has(id) ? link(text ?? classById.get(id).name, `#/class/${encodeURIComponent(id)}`) : text ?? id);
-  const icon = name => (/back|api|server/i.test(name) ? '⚙️' : /front|web|app|ui/i.test(name) ? '🖥️' : /test|load/i.test(name) ? '🧪' : '📦');
+  const icon = name => (/back|api|server/i.test(name) ? 'API' : /front|web|app|ui/i.test(name) ? 'UI' : /test|load/i.test(name) ? 'QA' : 'SRC');
 
   function counts(c) {
     const missing = c.members.filter(m => !m.summary).length + (c.summary || c.kind === 'module' ? 0 : 1);
@@ -69,8 +69,8 @@
     const endpoints = features.flatMap(f => f.endpoints);
     const members = data.classes.reduce((n, c) => n + c.members.length, 0);
     return el('div', { class: 'row row-cols-2 row-cols-lg-4 g-3 mb-4' }, [
-      stat(features.length, 'controllers', 265), stat(endpoints.length, 'endpoints', 330),
-      stat(endpoints.filter(e => e.callers.length).length, 'used by the front end', 150), stat(`${data.classes.length} · ${members}`, 'classes · members', 25)]);
+      stat(features.length, 'controllers', 215), stat(endpoints.length, 'endpoints', 215),
+      stat(endpoints.filter(e => e.callers.length).length, 'used by the front end', 215), stat(`${data.classes.length} · ${members}`, 'classes · members', 215)]);
   }
 
   function areaTiles(selectedId) {
@@ -85,13 +85,13 @@
         el('h2', { class: 'h4 mb-1' }, t.name),
         el('p', { class: 'mb-2 opacity-75' }, plural(classes.length, 'class or file', 'classes and files'), own ? ` · ${plural(own, 'controller', 'controllers')}` : ''),
         el('div', { class: 'progress', role: 'progressbar', 'aria-label': 'Described', 'aria-valuenow': done, 'aria-valuemin': 0, 'aria-valuemax': 100 }, el('div', { class: 'progress-bar', style: `width:${done}%` })),
-        el('small', { class: 'opacity-75' }, gap ? `${done}% described · ${gap} to go` : 'all described ✓')));
+        el('small', { class: 'opacity-75' }, gap ? `${done}% described · ${gap} to go` : 'all described')));
     }));
   }
 
   function overview() {
     return [el('div', { class: 'hero' }, el('h1', { class: 'display-6 fw-bold mb-1' }, `Explore ${data.root}`),
-      el('p', { class: 'mb-0' }, 'Pick an area. The back end opens as one tile per controller; open a controller to follow each method from the screen that calls it to the code behind it.')),
+      el('p', { class: 'mb-0' }, 'Choose an area. The back end opens as one tile per controller; open a controller to follow each method from the front-end code that calls it to the code behind it.')),
       stats(), el('h2', { class: 'h5 mb-3' }, 'Areas'), areaTiles(null)];
   }
 
@@ -105,7 +105,7 @@
           el('div', { class: 'min-w-0' }, el('h3', { class: 'h6 mb-0 text-break' }, f.name.replace(/Controller$/, ''), el('span', { class: 'text-body-secondary fw-normal' }, 'Controller')), code('/' + f.route))),
         owner?.summary ? el('p', { class: 'ctl-text' }, owner.summary) : el('p', { class: 'ctl-text' }, noText()),
         el('div', { class: 'ctl-foot' }, el('div', { class: 'd-flex flex-wrap gap-1' }, verbCounts(f).map(([v, n]) => verbPill(v, n))),
-          el('span', { class: 'ctl-callers', title: 'Front-end functions that call this controller' }, `🖥️ ${callers}`))));
+          el('span', { class: 'ctl-callers', title: 'Front-end functions that call this controller' }, `UI ${callers}`))));
     return tile;
   }
 
@@ -131,7 +131,7 @@
     const section = el('section', null,
       el('div', { class: 'toolbar' },
         el('h2', { class: 'h5 mb-0' }, `${t.name}: `, el('span', { class: 'ctl-count' })),
-        el('input', { class: 'form-control form-control-sm filter', type: 'search', placeholder: '🔎 Filter controllers by name, route or text', 'aria-label': 'Filter controllers', value: state.text,
+        el('input', { class: 'form-control form-control-sm filter', type: 'search', placeholder: 'Filter controllers by name, route or text', 'aria-label': 'Filter controllers', value: state.text,
           oninput: e => { state.text = e.target.value; applyFilter(section); } }),
         el('div', { class: 'd-flex flex-wrap gap-1' }, VERB_ORDER.filter(v => own.some(f => f.endpoints.some(e => e.verb === v))).map(v =>
           el('button', { type: 'button', class: `verb verb-${v} chip${state.verbs.has(v) ? ' on' : ''}`, 'aria-pressed': state.verbs.has(v), title: `Only controllers with a ${v}`,
@@ -175,15 +175,15 @@
     const m = memberOf(f.class, e.member, e.line);
     return el('details', { class: `endpoint endpoint-${e.verb}`, open: true },
       el('summary', null, verbPill(e.verb), code('/' + e.path), el('span', { class: 'text-body-secondary small' }, e.member),
-        el('span', { class: 'ms-auto d-flex gap-1' }, el('span', { class: 'badge rounded-pill text-bg-primary', title: 'Front-end functions that call it' }, `🖥️ ${e.callers.length}`),
-          el('span', { class: 'badge rounded-pill text-bg-info', title: 'Steps behind it' }, `⛓ ${e.flow.length}`))),
+        el('span', { class: 'ms-auto d-flex gap-1' }, el('span', { class: 'count count-front', title: 'Front-end functions that call it' }, `UI ${e.callers.length}`),
+          el('span', { class: 'count count-back', title: 'Steps behind it' }, `${plural(e.flow.length, 'step', 'steps')}`))),
       el('div', { class: 'endpoint-body' },
         el('p', { class: 'mb-3' }, m?.summary ? m.summary : noText(), m ? badge(m) : null, ' ', el('span', { class: 'text-body-secondary small' }, code(`line ${e.line}`))),
         el('div', { class: 'row g-3' },
-          el('div', { class: 'col-md-5' }, el('div', { class: 'lane lane-front' }, el('div', { class: 'lane-title' }, '🖥️ Called from (front end)'),
+          el('div', { class: 'col-md-5' }, el('div', { class: 'lane lane-front' }, el('div', { class: 'lane-title' }, 'Called from (front end)'),
             e.callers.length ? el('ul', { class: 'list-unstyled mb-0' }, e.callers.map(c => el('li', { class: 'mb-1' }, el('span', { class: 'step step-front' }, classLink(c.class, `${classById.get(c.class)?.name ?? c.class}.${c.member}`)))))
               : el('span', { class: 'text-body-secondary fst-italic' }, 'no front-end call found'))),
-          el('div', { class: 'col-md-7' }, el('div', { class: 'lane lane-back' }, el('div', { class: 'lane-title' }, '⚙️ Then (back end)'),
+          el('div', { class: 'col-md-7' }, el('div', { class: 'lane lane-back' }, el('div', { class: 'lane-title' }, 'Then (back end)'),
             e.flow.length ? flowSteps(e.flow, 1) : el('span', { class: 'text-body-secondary fst-italic' }, 'no calls to other classes found'))))));
   }
 
@@ -264,6 +264,6 @@
 
   search.addEventListener('input', () => { location.hash = search.value.trim() ? `#/search/${encodeURIComponent(search.value.trim())}` : '#/'; });
   window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/search/')) search.value = ''; render(); });
-  document.getElementById('title').textContent = `🌳 Code tree · ${data.root}`;
+  document.getElementById('title').textContent = `Code tree · ${data.root}`;
   render();
 })();
