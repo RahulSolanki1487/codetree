@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copies the pinned tree-sitter grammars from node_modules into grammars/ and writes their SHA-256 into src/grammar-hashes.js.
 // The tool checks each file against that table before it loads it. Run after changing a version in package.json.
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ mkdirSync(join(root, 'grammars'), { recursive: true });
 const hashes = {};
 for (const [name, from] of Object.entries(files).sort()) {
   copyFileSync(from, join(root, 'grammars', name));
+  chmodSync(join(root, 'grammars', name), 0o644);
   hashes[name] = createHash('sha256').update(readFileSync(join(root, 'grammars', name))).digest('hex');
 }
 const body = Object.entries(hashes).map(([n, h]) => `  '${n}': '${h}',`).join('\n');

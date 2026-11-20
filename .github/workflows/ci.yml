@@ -17,5 +17,5 @@ jobs:
         run: |
           npm run build
           node scripts/grammars.mjs
-          git diff --exit-code -- scripts/codetree.mjs src/viewer-assets.js src/grammar-hashes.js grammars
+          git -c core.fileMode=false diff --exit-code -- scripts/codetree.mjs src/viewer-assets.js src/grammar-hashes.js grammars
       - run: npm test
