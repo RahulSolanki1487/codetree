@@ -27,7 +27,7 @@
   }
   const link = (text, hash, cls) => el('a', { href: hash, class: cls }, text);
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return 195 + (h % 60); }; // blues, teals and indigos only
+  const hueOf = text => { let h = 0; for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360; return 190 + (h % 40); }; // blues and teals only
   const initials = name => (name.replace(/Controller$/, '').match(/[A-Z][a-z0-9]*/g) ?? [name]).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const noText = () => el('span', { class: 'text-body-secondary fst-italic' }, 'no description yet');
   const description = (item, kind) => (kind === 'module' ? el('span', { class: 'text-body-secondary fst-italic' }, 'the functions of this file') : item.summary ? el('span', null, item.summary) : noText());
