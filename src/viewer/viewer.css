@@ -1,30 +1,4 @@
-:root { --bg: #fafafa; --surface: #fff; --text: #1f2328; --muted: #656d76; --border: #d8dee4; --brand: #0969da; --warn: #9a6700; --ok: #1a7f37; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0d1117; --surface: #161b22; --text: #e6edf3; --muted: #8b949e; --border: #30363d; --brand: #58a6ff; --warn: #d29922; --ok: #3fb950; } }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { position: sticky; top: 0; z-index: 1; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border); }
-header h1 { font-size: 17px; margin: 0; }
-#search { flex: 1; min-width: 220px; max-width: 520px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
-main { max-width: 1100px; margin: 0 auto; padding: 20px; }
-a { color: var(--brand); text-decoration: none; } a:hover { text-decoration: underline; }
-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; overflow-wrap: anywhere; }
-.crumbs { margin-bottom: 8px; }
-.lead { color: var(--muted); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.tile { display: block; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); }
-.tile:hover { border-color: var(--brand); text-decoration: none; }
-.tile h2 { margin: 0 0 4px; font-size: 16px; } .tile p { margin: 2px 0; color: var(--muted); font-size: 13px; }
-.tile .gap { color: var(--warn); } .tile .ok { color: var(--ok); }
-.rows { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.rows li { display: grid; grid-template-columns: minmax(150px, 260px) 80px 1fr auto; gap: 4px 12px; align-items: baseline; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
-.name { font-weight: 600; overflow-wrap: anywhere; } .kind, .meta { color: var(--muted); font-size: 13px; }
-.none { color: var(--muted); font-style: italic; }
-.badge { margin-left: 6px; padding: 0 6px; border: 1px solid var(--warn); border-radius: 10px; color: var(--warn); font-size: 12px; font-style: normal; }
-.toggle { display: inline-block; margin: 6px 0; font-size: 13px; color: var(--muted); }
-.skipped { color: var(--muted); font-size: 13px; }
-@media (max-width: 720px) { .rows li { grid-template-columns: 1fr; } }
-.members li { grid-template-columns: minmax(150px, 260px) 80px 1fr; }
-.members .meta { grid-column: 2 / -1; }
-.section { margin: 24px 0 8px; font-size: 16px; }
-.verb { font-size: 12px; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); }
-.endpoints li { grid-template-columns: minmax(150px, 320px) 120px 1fr auto; }
+/* Only what Bootstrap does not give: the page reads fine without its stylesheet. */
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+summary { cursor: pointer; }
+a.card:hover { border-color: var(--bs-primary); }

@@ -58,7 +58,7 @@ An optional `codetree.json` at the project's root renames areas: `{ "name": "My 
 - **No network, no telemetry, no keys.** The tool never calls a model. Claude runs in your own session.
 - **The agent only returns text.** `describe` takes a list of `{id, description}`, refuses anything with markup, links, quotes or a comment ending, and inserts the rest itself. Claude never edits your files.
 - **Your code is treated as data.** A comment saying "ignore your instructions" is something to describe, not something to obey.
-- **The page is one offline file** that draws everything as text, under a policy that allows no network.
+- **The page is one file** that draws everything as text. Its only outside request is the Bootstrap stylesheet (pinned to version 5.3.9 with an integrity checksum, from cdn.jsdelivr.net); the policy allows nothing else, and the page still works, just plainer, offline. Nothing from your code is ever sent.
 - It will not overwrite a file it did not make.
 
 The tests check these rules, including running the tool under Node's permission model with no way to start a program. See [SECURITY.md](SECURITY.md).
