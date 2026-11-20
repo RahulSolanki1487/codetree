@@ -38,25 +38,71 @@ function bestEndpoints(call, endpoints) {
   return fits.filter(x => x.score === best).map(x => x.e);
 }
 
-/** The classes a controller takes in (its constructor parameters, read from its signature), by name, other than itself. */
-function usedBy(controller, byName) {
-  const names = new Set(controller.signature.match(/\b[A-Z]\w*/g) ?? []);
-  return [...names].map(n => byName.get(n)).filter(c => c && c !== controller && c.kind !== 'enum').map(c => c.id);
+/** The parameters of a constructor (or primary constructor) in a signature, as name → type name: "(IFoo foo, A.B<C> bar)" gives foo → IFoo, bar → B. */
+function parametersOf(signature, into) {
+  const start = signature.indexOf('(');
+  if (start < 0) return;
+  let depth = 0;
+  let current = '';
+  const parts = [];
+  for (const ch of signature.slice(start + 1)) {
+    if (ch === ')' && depth === 0) break;
+    if ('(<['.includes(ch)) depth++;
+    if (')>]'.includes(ch)) depth--;
+    if (ch === ',' && depth === 0) { parts.push(current); current = ''; } else current += ch;
+  }
+  parts.push(current);
+  for (const part of parts) {
+    const m = /^\s*(?:\[[^\]]*\]\s*)*([\w.]+)(?:<.*>)?\??\s+(\w+)\s*(?:=.*)?$/s.exec(part);
+    if (m) { const type = m[1].split('.').pop(); into.set(m[2], type); into.set('_' + m[2], type); }
+  }
+}
+
+/** The things a class is given when it is made: name → type name, from its primary constructor and its constructors. */
+function dependenciesOf(c, cache) {
+  if (!cache.has(c)) {
+    const deps = new Map();
+    parametersOf(c.signature, deps);
+    for (const m of c.members) if (m.kind === 'constructor') parametersOf(m.signature, deps);
+    cache.set(c, deps);
+  }
+  return cache.get(c);
+}
+
+/** The class a type name means: the class itself, or for an interface IFoo the class Foo when there is one. */
+function classNamed(type, byName) {
+  const implementation = /^I[A-Z]/.test(type) ? byName.get(type.slice(1)) : null;
+  return [implementation, byName.get(type)].find(c => c && c.kind !== 'interface') ?? byName.get(type);
+}
+
+const DEEPEST = 2;
+
+/** What a method hands its work to, as steps { class, member, line, calls }: calls on what the class was given, to methods found in the code; DEEPEST levels down. */
+function flowOf(c, member, byName, cache, depth, path) {
+  const deps = dependenciesOf(c, cache);
+  const steps = [];
+  for (const call of member.invokes ?? []) {
+    const target = deps.has(call.target) ? classNamed(deps.get(call.target), byName) : null;
+    const found = target?.members.find(m => m.name === call.method);
+    if (!found || path.has(found)) continue;
+    steps.push({ class: target.id, member: found.name, line: found.line, calls: depth > 1 ? flowOf(target, found, byName, cache, depth - 1, new Set([...path, found])) : [] });
+  }
+  return steps;
 }
 
 /** Builds the features from the classes of a scan (each member may have `http`, each class `route`, each front-end member `calls`). */
 export function buildFeatures(classes) {
   const byName = new Map();
   for (const c of classes) if (!byName.has(c.name)) byName.set(c.name, c);
+  const cache = new Map();
   const controllers = classes.filter(c => c.route !== undefined && c.members.some(m => m.http));
 
   const features = controllers.map(c => ({
     id: c.id,
-    name: c.name.replace(/Controller$/, ''),
+    name: c.name,
     route: routeOf(c, { path: '' }),
     class: c.id,
-    uses: usedBy(c, byName),
-    endpoints: c.members.filter(m => m.http).map(m => ({ verb: m.http.verb, path: routeOf(c, m.http), member: m.name, line: m.line, callers: [] })),
+    endpoints: c.members.filter(m => m.http).map(m => ({ verb: m.http.verb, path: routeOf(c, m.http), member: m.name, line: m.line, callers: [], flow: flowOf(c, m, byName, cache, DEEPEST, new Set([m])) })),
   }));
 
   const all = features.flatMap(f => f.endpoints.map(e => ({ ...e, ref: e })));

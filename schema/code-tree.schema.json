@@ -4,6 +4,14 @@
   "type": "object",
   "required": ["version", "root", "files", "tiles", "features", "classes", "skipped"],
   "additionalProperties": false,
+  "$defs": {
+    "step": {
+      "type": "object",
+      "required": ["class", "member", "line", "calls"],
+      "additionalProperties": false,
+      "properties": { "class": { "type": "string" }, "member": { "type": "string" }, "line": { "type": "integer", "minimum": 1 }, "calls": { "type": "array", "items": { "$ref": "#/$defs/step" } } }
+    }
+  },
   "properties": {
     "version": { "const": 1 },
     "root": { "type": "string" },
@@ -25,25 +33,25 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "route", "class", "uses", "endpoints"],
+        "required": ["id", "name", "route", "class", "endpoints"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string" },
           "name": { "type": "string" },
           "route": { "type": "string" },
           "class": { "type": "string" },
-          "uses": { "type": "array", "items": { "type": "string" } },
           "endpoints": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["verb", "path", "member", "line", "callers"],
+              "required": ["verb", "path", "member", "line", "callers", "flow"],
               "additionalProperties": false,
               "properties": {
                 "verb": { "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
                 "path": { "type": "string" },
                 "member": { "type": "string" },
                 "line": { "type": "integer", "minimum": 1 },
+                "flow": { "type": "array", "items": { "$ref": "#/$defs/step" } },
                 "callers": {
                   "type": "array",
                   "items": {

@@ -35,7 +35,6 @@
   const verbBadge = verb => el('span', { class: `badge text-bg-${VERB_COLOR[verb] ?? 'secondary'} me-2` }, verb);
   const tileOf = classId => data.tiles.find(t => t.classes.includes(classId));
   const classLink = (id, text) => (classById.has(id) ? link(text ?? classById.get(id).name, `#/class/${encodeURIComponent(id)}`) : text ?? id);
-  const joined = nodes => nodes.flatMap((n, i) => [i ? ', ' : null, n]);
 
   function counts(c) {
     const missing = c.members.filter(m => !m.summary).length + (c.summary || c.kind === 'module' ? 0 : 1);
@@ -53,92 +52,82 @@
       el('label', { class: 'form-check-label', for: 'missing' }, 'Show only what has no description'));
   }
 
-  // The areas are filters: the one chosen (or "All") decides what the list below the tiles shows.
-  function areaCard(href, title, lines, selected) {
-    return el('div', { class: 'col' }, el('a', { href, class: `card h-100 text-decoration-none ${selected ? 'border-primary border-2 shadow-sm' : ''}`, 'aria-current': selected ? 'true' : null },
-      el('div', { class: 'card-body' }, el('h2', { class: 'h5 card-title text-body' }, title), lines.map(l => el('p', { class: `card-text mb-1 small ${l.cls ?? 'text-body-secondary'}` }, l.text)))));
-  }
+  const byRoute = (a, b) => a.path.localeCompare(b.path) || VERB_ORDER.indexOf(a.verb) - VERB_ORDER.indexOf(b.verb);
+  const memberOf = (classId, name, line) => classById.get(classId)?.members.find(m => m.name === name && m.line === line) ?? classById.get(classId)?.members.find(m => m.name === name);
 
-  function overview(selectedId) {
-    const selected = selectedId ? data.tiles.find(x => x.id === selectedId) : null;
-    if (selectedId && !selected) return notFound();
-    const totalMissing = data.classes.reduce((n, c) => n + counts(c).missing, 0);
-    const cards = [areaCard('#/', 'All', [{ text: `${plural(data.classes.length, 'class or file', 'classes and files')}` }, { text: `${plural(features.length, 'feature', 'features')}` },
-      { text: totalMissing ? `${totalMissing} without a description` : 'all described', cls: totalMissing ? 'text-warning-emphasis' : 'text-success' }], !selected)];
-    for (const t of data.tiles) {
-      const classes = t.classes.map(id => classById.get(id));
-      const members = classes.reduce((n, c) => n + counts(c).members, 0);
-      const gap = classes.reduce((n, c) => n + counts(c).missing, 0);
-      const own = features.filter(f => t.classes.includes(f.class));
-      cards.push(areaCard(`#/tile/${encodeURIComponent(t.id)}`, t.name, [
-        { text: `${plural(classes.length, 'class or file', 'classes and files')} · ${plural(members, 'member', 'members')}` },
-        ...(own.length ? [{ text: plural(own.length, 'feature', 'features') }] : []),
-        { text: gap ? `${gap} without a description` : 'all described', cls: gap ? 'text-warning-emphasis' : 'text-success' }], selected?.id === t.id));
+  // The home page: one tile per controller, then the other areas (folders) for everything else.
+  function overview() {
+    const callers = f => new Set(f.endpoints.flatMap(e => e.callers.map(c => c.class))).size;
+    const out = [];
+    if (features.length) {
+      out.push(el('h2', { class: 'h5 mb-1' }, 'Controllers'),
+        el('p', { class: 'text-body-secondary small' }, 'Each controller is a feature: open one to see its methods, who calls them and what they call.'),
+        el('div', { class: 'row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3 mb-4' }, features.map(f => {
+          const owner = classById.get(f.class);
+          return el('div', { class: 'col' }, el('a', { href: `#/feature/${encodeURIComponent(f.id)}`, class: 'card h-100 text-decoration-none' }, el('div', { class: 'card-body' },
+            el('h3', { class: 'h6 card-title text-body mb-1 text-break' }, f.name), el('p', { class: 'mb-2' }, code('/' + f.route)),
+            owner?.summary ? el('p', { class: 'card-text small text-body-secondary mb-2' }, owner.summary) : null,
+            el('p', { class: 'card-text small mb-0' }, el('span', { class: 'badge text-bg-secondary me-1' }, plural(f.endpoints.length, 'method', 'methods')),
+              el('span', { class: 'badge text-bg-light border' }, `called from ${plural(callers(f), 'front-end class', 'front-end classes')}`)))));
+        })));
     }
-
-    const shownFeatures = selected ? features.filter(f => selected.classes.includes(f.class)) : features;
-    const out = [el('div', { class: 'row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3 mb-4' }, cards)];
-    if (shownFeatures.length) out.push(featureList(shownFeatures, selected ? `${selected.name}: features` : 'Features (one per controller)'));
-    if (selected) out.push(classList(selected, shownFeatures.length > 0));
-    else if (!shownFeatures.length) out.push(el('p', { class: 'text-body-secondary' }, 'Choose an area to see its classes and files.'));
+    out.push(el('h2', { class: 'h5 mb-2' }, features.length ? 'All classes, by area' : 'Areas'),
+      el('div', { class: 'row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3 mb-4' }, data.tiles.map(t => {
+        const classes = t.classes.map(id => classById.get(id));
+        const gap = classes.reduce((n, c) => n + counts(c).missing, 0);
+        return el('div', { class: 'col' }, el('a', { href: `#/tile/${encodeURIComponent(t.id)}`, class: 'card h-100 text-decoration-none' }, el('div', { class: 'card-body' },
+          el('h3', { class: 'h6 card-title text-body' }, t.name), el('p', { class: 'card-text small text-body-secondary mb-1' }, plural(classes.length, 'class or file', 'classes and files')),
+          el('p', { class: `card-text small mb-0 ${gap ? 'text-warning-emphasis' : 'text-success'}`}, gap ? `${gap} without a description` : 'all described'))));
+      })));
     return out;
   }
 
-  function featureList(list, title) {
-    return el('section', { class: 'mb-4' }, el('h2', { class: 'h5 mb-1' }, title),
-      el('p', { class: 'text-body-secondary small' }, 'Each controller with the calls it answers and the front-end functions that call them.'),
-      list.map(f => {
-        const owner = classById.get(f.class);
-        const endpoints = [...f.endpoints].sort((a, b) => a.path.localeCompare(b.path) || VERB_ORDER.indexOf(a.verb) - VERB_ORDER.indexOf(b.verb));
-        return el('details', { class: 'card mb-2' },
-          el('summary', { class: 'card-header d-flex flex-wrap gap-2 align-items-center' }, el('strong', null, f.name), code(`/${f.route}`),
-            el('span', { class: 'badge text-bg-secondary ms-auto' }, plural(f.endpoints.length, 'endpoint', 'endpoints'))),
-          el('div', { class: 'card-body py-2' },
-            owner?.summary ? el('p', { class: 'mb-1' }, owner.summary, badge(owner)) : null,
-            el('p', { class: 'small mb-2' }, classLink(f.class, 'Controller'), ' · ', link('Open this feature', `#/feature/${encodeURIComponent(f.id)}`))),
-          endpointRows(f, endpoints));
-      }));
+  function areaView(id) {
+    const t = data.tiles.find(x => x.id === id);
+    if (!t) return notFound();
+    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: t.name }]), el('h1', { class: 'h3' }, t.name), classList(t)];
   }
 
-  function endpointRows(f, endpoints) {
-    const owner = classById.get(f.class);
-    return el('ul', { class: 'list-group list-group-flush' }, endpoints.map(e => {
-      const m = owner?.members.find(x => x.name === e.member && x.line === e.line) ?? owner?.members.find(x => x.name === e.member);
-      return el('li', { class: 'list-group-item' },
-        el('div', { class: 'd-flex flex-wrap align-items-baseline gap-1' }, verbBadge(e.verb), code(`/${e.path}`), el('span', { class: 'text-body-secondary small ms-2' }, e.member)),
-        el('div', { class: 'small' }, m?.summary ? m.summary : noText(), m ? badge(m) : null),
-        el('div', { class: 'small text-body-secondary' }, e.callers.length
-          ? ['Called from: ', joined(e.callers.map(c => classLink(c.class, `${classById.get(c.class)?.name ?? c.class}.${c.member}`)))]
-          : el('span', { class: 'fst-italic' }, 'no front-end call found')));
-    }));
-  }
-
-  function classList(t, collapsed) {
+  function classList(t) {
     const classes = t.classes.map(i => classById.get(i)).sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || a.name.localeCompare(b.name));
     const shown = classes.filter(c => !state.missingOnly || counts(c).missing > 0);
-    const body = [toggle(),
+    return [toggle(),
       el('ul', { class: 'list-group mb-3' }, shown.map(c => el('li', { class: 'list-group-item d-flex flex-wrap gap-2 align-items-baseline' },
         link(c.name, `#/class/${encodeURIComponent(c.id)}`, 'fw-semibold'), el('span', { class: 'badge text-bg-light border' }, c.kind),
         el('span', { class: 'flex-grow-1' }, description(c, c.kind), badge(c)), el('span', { class: 'text-body-secondary small' }, plural(c.members.length, 'member', 'members'))))),
       shown.length ? null : el('p', { class: 'text-body-secondary fst-italic' }, 'Nothing to show.')];
-    const title = `${t.name}: ${plural(classes.length, 'class or file', 'classes and files')}`;
-    return collapsed
-      ? el('details', { class: 'mb-4' }, el('summary', { class: 'h5 mb-3' }, title), body)
-      : el('section', { class: 'mb-4' }, el('h2', { class: 'h5' }, title), body);
+  }
+
+  // The steps behind a method, as a nested list: what it hands its work to, and what that hands its work to.
+  function flowSteps(steps) {
+    return el('ul', { class: 'list-unstyled ms-2 ps-3 border-start mb-0' }, steps.map(s => {
+      const m = memberOf(s.class, s.member, s.line);
+      return el('li', { class: 'mt-1' }, el('span', { class: 'text-body-secondary' }, '→ '), classLink(s.class, `${classById.get(s.class)?.name ?? s.class}.${s.member}`),
+        m?.summary ? el('div', { class: 'small text-body-secondary' }, m.summary, badge(m)) : null, s.calls.length ? flowSteps(s.calls) : null);
+    }));
   }
 
   function feature(id) {
     const f = features.find(x => x.id === id);
     if (!f) return notFound();
     const owner = classById.get(f.class);
-    const t = tileOf(f.class);
-    const endpoints = [...f.endpoints].sort((a, b) => a.path.localeCompare(b.path) || VERB_ORDER.indexOf(a.verb) - VERB_ORDER.indexOf(b.verb));
-    return [crumbs([{ text: 'All areas', hash: '#/' }, ...(t ? [{ text: t.name, hash: `#/tile/${encodeURIComponent(t.id)}` }] : []), { text: f.name }]),
-      el('h1', { class: 'h3' }, f.name),
-      el('p', null, code(`/${f.route}`), ' · handled by ', classLink(f.class), owner ? [' ', code(`${owner.file}:${owner.line}`)] : null),
+    return [crumbs([{ text: 'All areas', hash: '#/' }, { text: f.name }]),
+      el('h1', { class: 'h3 text-break' }, f.name),
+      el('p', null, code('/' + f.route), ' · ', classLink(f.class, 'open the class'), owner ? [' ', code(`${owner.file}:${owner.line}`)] : null),
       owner?.summary ? el('p', { class: 'lead' }, owner.summary, badge(owner)) : null,
-      f.uses.length ? el('p', null, 'Uses: ', joined(f.uses.map(u => classLink(u)))) : null,
-      el('div', { class: 'card' }, endpointRows(f, endpoints))];
+      el('h2', { class: 'h5' }, plural(f.endpoints.length, 'method', 'methods')),
+      [...f.endpoints].sort(byRoute).map(e => {
+        const m = memberOf(f.class, e.member, e.line);
+        return el('div', { class: 'card mb-3' },
+          el('div', { class: 'card-header d-flex flex-wrap align-items-baseline gap-1' }, verbBadge(e.verb), code('/' + e.path), el('span', { class: 'text-body-secondary small ms-2' }, e.member), el('span', { class: 'ms-auto' }, code(':' + e.line))),
+          el('div', { class: 'card-body' },
+            el('p', { class: 'mb-2' }, m?.summary ? m.summary : noText(), m ? badge(m) : null),
+            el('div', { class: 'row g-3 small' },
+              el('div', { class: 'col-md-4' }, el('div', { class: 'fw-semibold mb-1' }, 'Called from (front end)'),
+                e.callers.length ? el('ul', { class: 'list-unstyled mb-0' }, e.callers.map(c => el('li', null, classLink(c.class, `${classById.get(c.class)?.name ?? c.class}.${c.member}`)))) : el('span', { class: 'text-body-secondary fst-italic' }, 'no front-end call found')),
+              el('div', { class: 'col-md-8' }, el('div', { class: 'fw-semibold mb-1' }, 'Then (back end)'),
+                e.flow.length ? flowSteps(e.flow) : el('span', { class: 'text-body-secondary fst-italic' }, 'no calls to other classes found')))));
+      })];
   }
 
   function classView(id) {
@@ -189,7 +178,7 @@
   function render() {
     const [kind, ...rest] = location.hash.replace(/^#\/?/, '').split('/');
     const value = decodeURIComponent(rest.join('/'));
-    const body = kind === 'tile' ? overview(value) : kind === 'class' ? classView(value) : kind === 'feature' ? feature(value) : kind === 'search' ? results(value) : overview(null);
+    const body = kind === 'tile' ? areaView(value) : kind === 'class' ? classView(value) : kind === 'feature' ? feature(value) : kind === 'search' ? results(value) : overview();
     app.replaceChildren(...body.flat().filter(Boolean), el('hr'), ...footer());
     window.scrollTo(0, 0);
   }

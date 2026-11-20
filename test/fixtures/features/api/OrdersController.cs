@@ -13,7 +13,7 @@ public class OrdersController(OrderService orders, Microsoft.Extensions.Options.
     public IActionResult ById(int id) => Ok();
 
     [HttpPost]
-    public IActionResult Place() => Ok();
+    public IActionResult Place() => Ok(orders.Price());
 
     [HttpPost("/api/hooks/paid")]
     public IActionResult Paid() => Ok();
@@ -21,4 +21,12 @@ public class OrdersController(OrderService orders, Microsoft.Extensions.Options.
     public void NotAnEndpoint() { }
 }
 
-public class OrderService { }
+public class OrderService(Repo repo)
+{
+    public int Price() => repo.Load() + this.repo.Load();
+}
+
+public class Repo
+{
+    public int Load() => 1;
+}

@@ -16,6 +16,21 @@ function routingOf(node) {
   return found;
 }
 
+/** The calls of the form target.Method(...) in a method's body, where target is a plain name or this.name: what the method hands its work to. */
+function invokesOf(node) {
+  const found = new Map();
+  for (const call of node.descendantsOfType('invocation_expression')) {
+    const fn = call.childForFieldName('function');
+    if (fn?.type !== 'member_access_expression') continue;
+    let target = fn.childForFieldName('expression');
+    if (target?.type === 'member_access_expression' && target.childForFieldName('expression')?.type === 'this_expression') target = target.childForFieldName('name');
+    const method = fn.childForFieldName('name')?.text.replace(/<.*$/s, '');
+    if (target?.type !== 'identifier' || !method) continue;
+    found.set(target.text + '.' + method, { target: target.text, method });
+  }
+  return [...found.values()];
+}
+
 const TYPES = {
   class_declaration: 'class', interface_declaration: 'interface', struct_declaration: 'struct', record_declaration: 'record',
   record_struct_declaration: 'record', enum_declaration: 'enum',
@@ -51,7 +66,7 @@ function memberOf(node, lines) {
   const signature = kind === 'property'
     ? head(node, ['accessor_list', 'arrow_expression_clause', '=', ';'], ['attribute_list'])
     : head(node, ['block', 'arrow_expression_clause', ';', 'constructor_initializer'], ['attribute_list']);
-  return { name, kind, signature, line: node.startPosition.row + 1, ...summaryOf(leading(node).comments), place: placeFor(node, lines), http: routingOf(node).http };
+  return { name, kind, signature, line: node.startPosition.row + 1, ...summaryOf(leading(node).comments), place: placeFor(node, lines), http: routingOf(node).http, invokes: invokesOf(node) };
 }
 
 /** The grammar cannot read a primary constructor with a qualified generic parameter (A.B.IOptions<C>) and puts "Name(" in an error node: the name is there. */

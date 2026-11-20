@@ -6,14 +6,21 @@ import { scan } from '../src/scan.js';
 import { repo } from './helpers.js';
 
 const { model } = await scan(join(repo, 'test', 'fixtures', 'features'));
-const orders = model.features.find(f => f.name === 'Orders');
+const orders = model.features.find(f => f.name === 'OrdersController');
 const endpoint = (verb, path) => orders.endpoints.find(e => e.verb === verb && e.path === path);
 const callers = e => e.callers.map(c => `${c.class.split('#')[1]}.${c.member}`).sort();
 
-test('a controller is one feature, named without "Controller", with the classes it takes in', () => {
-  assert.deepEqual(model.features.map(f => f.name), ['Orders']);
+test('a controller is one feature, named like its class, with its route', () => {
+  assert.deepEqual(model.features.map(f => f.name), ['OrdersController']);
   assert.equal(orders.route, 'api/orders');
-  assert.deepEqual(orders.uses.map(u => u.split('#')[1]), ['OrderService'], 'the qualified IOptions<> parameter does not hide the class name');
+});
+
+test('the flow of a method: what it calls on what the class was given, down two levels, even with a qualified generic parameter in the constructor', () => {
+  const names = steps => steps.map(s => `${s.class.split('#')[1]}.${s.member}`);
+  const place = endpoint('POST', 'api/orders');
+  assert.deepEqual(names(place.flow), ['OrderService.Price']);
+  assert.deepEqual(names(place.flow[0].calls), ['Repo.Load']);
+  assert.deepEqual(endpoint('GET', 'api/orders/mine').flow, []);
 });
 
 test('its endpoints have the verb and the full route; methods without a verb are not endpoints', () => {
