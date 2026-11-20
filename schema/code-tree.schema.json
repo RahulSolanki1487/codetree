@@ -2,8 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "codetree output, version 1",
   "type": "object",
-  "required": ["version", "root", "files", "tiles", "classes", "skipped"],
+  "required": ["version", "root", "files", "tiles", "features", "classes", "skipped"],
   "additionalProperties": false,
+  "$defs": {
+    "step": {
+      "type": "object",
+      "required": ["class", "member", "line", "calls"],
+      "additionalProperties": false,
+      "properties": { "class": { "type": "string" }, "member": { "type": "string" }, "line": { "type": "integer", "minimum": 1 }, "calls": { "type": "array", "items": { "$ref": "#/$defs/step" } } }
+    }
+  },
   "properties": {
     "version": { "const": 1 },
     "root": { "type": "string" },
@@ -18,6 +26,44 @@
           "id": { "type": "string" },
           "name": { "type": "string" },
           "classes": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "route", "class", "endpoints"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "route": { "type": "string" },
+          "class": { "type": "string" },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["verb", "path", "member", "line", "callers", "flow"],
+              "additionalProperties": false,
+              "properties": {
+                "verb": { "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+                "path": { "type": "string" },
+                "member": { "type": "string" },
+                "line": { "type": "integer", "minimum": 1 },
+                "flow": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+                "callers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["class", "member", "line"],
+                    "additionalProperties": false,
+                    "properties": { "class": { "type": "string" }, "member": { "type": "string" }, "line": { "type": "integer", "minimum": 1 } }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

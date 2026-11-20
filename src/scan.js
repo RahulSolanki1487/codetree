@@ -2,6 +2,7 @@
 // files are only read as text, and links are never followed.
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
+import { buildFeatures } from './features.js';
 import { use } from './grammars.js';
 import { isIgnored, parseGitignore } from './gitignore.js';
 import { GENERATED, MOST_BYTES, READABLE, SKIP_FOLDERS, UNSUPPORTED } from './languages.js';
@@ -134,6 +135,7 @@ export async function scan(folder, { gitignore = true } = {}) {
     root: override.name ?? basename(root),
     files: read,
     tiles,
+    features: buildFeatures(classes),
     classes: classes.map(c => ({
       id: c.id, name: c.name, kind: c.kind, ...(c.namespace ? { namespace: c.namespace } : {}), file: c.file, line: c.line, language: c.language,
       signature: c.signature, summary: c.summary, generated: false,

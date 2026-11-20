@@ -1,5 +1,5 @@
 // Reads TypeScript and JavaScript (tree-sitter): classes, interfaces, and the file's own functions. A description is the /** … */ comment above a declaration.
-import { collapse, head, indentOf, leading } from './common.js';
+import { collapse, head, indentOf, leading, pathsIn } from './common.js';
 
 const isDecorator = node => node.type === 'decorator';
 
@@ -25,7 +25,7 @@ function describe(outer, lines, node) {
 }
 
 function functionMember(node, outer, lines, name, kind, stop) {
-  return { name, kind, signature: head(node, stop, ['decorator'], { colon: true }), line: node.startPosition.row + 1, ...describe(outer, lines, node) };
+  return { name, kind, signature: head(node, stop, ['decorator'], { colon: true }), line: node.startPosition.row + 1, ...describe(outer, lines, node), calls: pathsIn(node) };
 }
 
 function classMembers(body, lines) {
@@ -41,7 +41,7 @@ function classMembers(body, lines) {
       const doc = summaryOf(leading(child, isDecorator).comments);
       if (!callable && !doc.hasComment) continue;
       const signature = callable ? `${name}${head(value, ['statement_block', '=>'], [], { colon: true })}` : head(child, ['=', ';']);
-      members.push({ name, kind: callable ? 'method' : 'property', signature: collapse(signature), line: child.startPosition.row + 1, ...describe(child, lines, child) });
+      members.push({ name, kind: callable ? 'method' : 'property', signature: collapse(signature), line: child.startPosition.row + 1, ...describe(child, lines, child), calls: pathsIn(child) });
     }
   }
   return members;
@@ -80,7 +80,7 @@ function declared(outer, node, lines, out, moduleMembers) {
         if (!value || !['arrow_function', 'function_expression', 'function'].includes(value.type)) continue;
         const name = d.childForFieldName('name')?.text ?? '';
         moduleMembers.push({
-          name, kind: 'function', signature: collapse(`${name}${head(value, ['statement_block', '=>'], [], { colon: true })}`), line: node.startPosition.row + 1, ...doc(),
+          name, kind: 'function', signature: collapse(`${name}${head(value, ['statement_block', '=>'], [], { colon: true })}`), line: node.startPosition.row + 1, ...doc(), calls: pathsIn(value),
         });
       }
       break;
