@@ -50,7 +50,7 @@ test('C#: interfaces, records, enums and nested classes are shown; generated fil
   assert.ok(find('UserService.Cache'));
   assert.equal(find('Thing'), undefined);
   assert.equal(find('SkippedBuildOutput'), undefined);
-  assert.equal(model.skipped.generated, 1);
+  assert.equal(model.skipped.generated, 4, 'the .g.cs file, the bundle, and two files that say they are generated');
 });
 
 test('TypeScript: JSDoc is the description, decorators are not part of the signature, and a file\'s functions are one entry', () => {
@@ -81,7 +81,7 @@ test('files in other languages are counted as skipped, never read', () => {
 });
 
 test('areas are the top-level folders', () => {
-  assert.deepEqual(model.tiles.map(t => t.name), ['api', 'evil', 'tools', 'web']);
+  assert.deepEqual(model.tiles.map(t => t.name), ['api', 'evil', 'ignored', 'tools', 'web']);
 });
 
 test('scanning changes nothing in the project', async () => {
@@ -109,5 +109,5 @@ test('the code tree.json override renames areas and the project', async () => {
   writeFileSync(join(folder, 'codetree.json'), JSON.stringify({ name: 'Demo', tiles: { Backend: ['api'], Scripts: ['tools', 'other'] } }));
   const { model: renamed } = await scan(folder);
   assert.equal(renamed.root, 'Demo');
-  assert.deepEqual(renamed.tiles.map(t => t.name), ['Backend', 'Scripts', 'evil', 'web']);
+  assert.deepEqual(renamed.tiles.map(t => t.name), ['Backend', 'Scripts', 'evil', 'ignored', 'web']);
 });

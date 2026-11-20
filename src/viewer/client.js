@@ -94,7 +94,8 @@
     const langs = Object.entries(data.skipped.languages);
     const notes = [];
     if (langs.length) notes.push(`Skipped files in unsupported languages: ${langs.map(([l, n]) => `${l} ${n}`).join(', ')}.`);
-    if (data.skipped.generated) notes.push(`Skipped ${plural(data.skipped.generated, 'generated file', 'generated files')}.`);
+    if (data.skipped.generated) notes.push(`Skipped ${plural(data.skipped.generated, 'generated or minified file', 'generated or minified files')}.`);
+    if (data.skipped.ignored) notes.push(`Left out ${plural(data.skipped.ignored, 'file or folder', 'files and folders')} that the project's .gitignore ignores.`);
     if (data.skipped.tooBig) notes.push(`Skipped ${plural(data.skipped.tooBig, 'file', 'files')} over 1 MB.`);
     return notes.map(n => el('p', { class: 'skipped' }, n));
   }
