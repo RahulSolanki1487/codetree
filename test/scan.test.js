@@ -50,7 +50,7 @@ test('C#: interfaces, records, enums and nested classes are shown; generated fil
   assert.ok(find('UserService.Cache'));
   assert.equal(find('Thing'), undefined);
   assert.equal(find('SkippedBuildOutput'), undefined);
-  assert.equal(model.skipped.generated, 2, 'the generated .g.cs file and the bundle');
+  assert.equal(model.skipped.generated, 4, 'the .g.cs file, the bundle, and two files that say they are generated');
 });
 
 test('TypeScript: JSDoc is the description, decorators are not part of the signature, and a file\'s functions are one entry', () => {
