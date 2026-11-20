@@ -1,6 +1,6 @@
 # Plan: a code tree for any codebase, as a Claude Code skill
 
-Status: plan, 2026-11-20. Nothing is built. The name is a working name (`codetree-skill`) and can change.
+Status: v0.1 built on branch `feature/v0.1` (2026-11-20), named `codetree`. The sections below are the plan it was built from; steps 1 to 8 are done.
 
 ## What it is
 

@@ -1,0 +1,12 @@
+{
+  "name": "codetree",
+  "description": "Code Tree: a browsable map of a C#, TypeScript/JavaScript or Python codebase.",
+  "owner": { "name": "codetree contributors" },
+  "plugins": [
+    {
+      "name": "codetree",
+      "source": "./",
+      "description": "Builds one HTML file with areas, classes, members, descriptions and search, and fills in missing descriptions as a diff you review."
+    }
+  ]
+}

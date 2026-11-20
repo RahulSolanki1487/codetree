@@ -1,0 +1,18 @@
+{
+  "name": "codetree",
+  "version": "0.1.0",
+  "description": "Turns a C#, TypeScript/JavaScript or Python codebase into one browsable HTML file, and finds missing descriptions.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "esbuild": "0.28.2",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.25.10"
+  }
+}

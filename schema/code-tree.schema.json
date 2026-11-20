@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "codetree output, version 1",
+  "type": "object",
+  "required": ["version", "root", "files", "tiles", "classes", "skipped"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "root": { "type": "string" },
+    "files": { "type": "integer", "minimum": 0 },
+    "tiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "classes"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "classes": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kind", "file", "line", "language", "signature", "summary", "generated", "members"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "enum": ["class", "interface", "struct", "record", "enum", "module"] },
+          "namespace": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "language": { "enum": ["c_sharp", "typescript", "tsx", "javascript", "python"] },
+          "signature": { "type": "string" },
+          "summary": { "type": "string" },
+          "generated": { "type": "boolean" },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "kind", "signature", "line", "summary", "generated"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "kind": { "enum": ["method", "constructor", "property", "operator", "function"] },
+                "signature": { "type": "string" },
+                "line": { "type": "integer", "minimum": 1 },
+                "file": { "type": "string" },
+                "summary": { "type": "string" },
+                "generated": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "skipped": {
+      "type": "object",
+      "required": ["languages", "generated", "tooBig"],
+      "additionalProperties": false,
+      "properties": {
+        "languages": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "generated": { "type": "integer" },
+        "tooBig": { "type": "integer" }
+      }
+    }
+  }
+}
