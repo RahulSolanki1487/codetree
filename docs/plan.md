@@ -4,14 +4,14 @@ Status: plan, 2026-11-20. Nothing is built. The name is a working name (`codetre
 
 ## What it is
 
-One command turns a folder of code into **one HTML file** you open in the browser: **tiles** (the top-level areas of the project), then the **classes or files** in each, then their **functions and methods**, each with a plain-words description and one **search box** across all of it. A second step finds what has no description and has an agent write it, as a diff you review before keeping.
+One command turns a folder of code **in the supported languages (C#, TypeScript/JavaScript and Python)** into **one HTML file** you open in the browser: **tiles** (the top-level areas of the project), then the **classes or files** in each, then their **functions and methods**, each with a plain-words description and one **search box** across all of it. A second step finds what has no description and has an agent write it, as a diff you review before keeping.
 
 It started as a feature inside a private project (a Code tree page for its web app and server). This plan makes it a small, public, beginner-friendly tool anyone can add to Claude Code.
 
 ## Goals for v0.1 (beginner level)
 
 - Install in two commands, run with one slash command, get one file.
-- Works on a project it has never seen, with no configuration.
+- Works on a C#, TypeScript/JavaScript or Python project it has never seen, with no configuration. Files in any other language are listed as skipped, never guessed at, and the README does not claim more than this stack.
 - Shows the descriptions the code already has, and says plainly where there is none ("no description yet"). It never invents one on its own.
 - Safe to point at any repository: it never runs, builds or loads anything from it, and makes no network calls.
 
@@ -39,9 +39,20 @@ Call graphs ("called by"), links to tests, type-aware analysis, deep per-languag
 4. **Search:** one box, across every tile, class and member, by name or description.
 5. **Marks:** members with no description are marked; members whose description an agent wrote are marked "generated" until a person keeps them.
 
-## Languages for v0.1
+## Languages for v0.1 (the supported stack, and nothing more)
 
-TypeScript/JavaScript and Python, read with tree-sitter (WebAssembly, so nothing to compile on the user's machine). Tree-sitter finds classes, functions, signatures and doc comments but not types, so there are no call links yet. Further languages (Go, Java, C#, Ruby…) are additions of a grammar plus a small mapping.
+| Language | Read with | What counts as a description | Where the agent's description goes |
+| --- | --- | --- | --- |
+| C# (`.cs`) | tree-sitter C# grammar | the `/// <summary>` XML comment | a `/// <summary>` line above the declaration (text escaped) |
+| TypeScript / JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`) | tree-sitter TypeScript grammar | the `/** … */` comment above the declaration | a `/** … */` line above it |
+| Python (`.py`) | tree-sitter Python grammar | the docstring | a docstring as the first statement of the function or class |
+
+All three are read with tree-sitter (WebAssembly, so nothing to compile and no .NET, Node project or Python environment is needed to scan). Tree-sitter finds namespaces, classes, interfaces, records, functions, methods, signatures and doc comments but not resolved types, so there are no call links yet.
+
+- **C# specifics:** namespaces and the folder of each `.csproj` group classes; interfaces, records, structs and enums are shown; `partial` classes are merged; generated files (`*.g.cs`, `*.Designer.cs`, `obj/`, `bin/`) are skipped.
+- **TypeScript specifics:** a file with several exports is a class-like entry named after the file; Angular `@Component` and `@Injectable` classes are shown as ordinary classes in v0.1.
+- **Deeper C# and Angular analysis** (call links, "called by", tests, which controller answers a web call) exists in the private project the idea came from. It could return later as an optional plugin; it is not part of v0.1, and it needs the .NET SDK (C#) or the project's own TypeScript (which this tool must never load from the scanned project).
+- **Anything else** (Go, Java, Ruby…) is out of scope: the tool says "skipped N files in unsupported languages" and lists them.
 
 ## The data format (one JSON file, versioned)
 
@@ -99,7 +110,7 @@ docs/plan.md, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md
 
 ## Tests
 
-- Fixture projects (a small TypeScript one and a small Python one) with known classes, members and comments; the tool's output is compared to a committed expected file.
+- Fixture projects (a small C# one, a small TypeScript one and a small Python one) with known classes, members and comments, including a `partial` C# class and a generated C# file that must be skipped; the tool's output is compared to a committed expected file.
 - A schema check on every output.
 - A test that scanning a fixture with a malicious comment ("ignore previous instructions…") changes nothing and that `apply` refuses output with links or markup.
 - A test that the tool makes no network call and spawns no process (a guard that fails if it tries).
@@ -109,19 +120,20 @@ docs/plan.md, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md
 
 | Step | Work | Done when |
 | --- | --- | --- |
-| 1 | Format, schema, tree-sitter reader for TypeScript/JavaScript | Fixture output matches |
-| 2 | Python reader | Fixture output matches |
-| 3 | Tiles by folder, `codetree.json` override | A fixture with tiles renames correctly |
-| 4 | Standalone HTML viewer with search | Opens offline; search finds a member by name and by description |
-| 5 | `scan` skill | `/…:scan` on a fixture writes the file |
-| 6 | `describe --list`, `--apply`, the skill | Fixture gets comments; unsafe output refused |
-| 7 | README with a screenshot, SECURITY.md, release v0.1.0 | Installs from a clean machine in two commands |
+| 1 | Format, schema, tree-sitter reader for C# | Fixture output matches (summaries, `partial`, generated files skipped) |
+| 2 | TypeScript/JavaScript reader | Fixture output matches |
+| 3 | Python reader, "skipped files in unsupported languages" report | Fixture output matches; a Go file is listed as skipped |
+| 4 | Tiles by folder (and by `.csproj` for C#), `codetree.json` override | A fixture with tiles renames correctly |
+| 5 | Standalone HTML viewer with search | Opens offline; search finds a member by name and by description |
+| 6 | `scan` skill | `/…:scan` on a fixture writes the file |
+| 7 | `describe --list`, `--apply`, the skill (C# `///`, TypeScript `/** */`, Python docstring inserters) | Fixture gets comments in each language's style; unsafe output refused |
+| 8 | README with a screenshot, SECURITY.md, release v0.1.0 | Installs from a clean machine in two commands |
 
 ## Open decisions
 
 - **Name** of the plugin, skill and repository (short, plain, not already taken).
 - **Licence:** MIT unless the owner says otherwise.
-- **Languages for v0.1:** TypeScript/JavaScript and Python, or another pair.
+- **Languages for v0.1:** C#, TypeScript/JavaScript and Python. Python can be dropped if the stack is only C# and TypeScript.
 - **Public from the start,** or private until v0.1 works. This repository starts private.
 
 ## Risks
