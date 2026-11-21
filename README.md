@@ -4,6 +4,28 @@ A Claude Code plugin that turns a codebase into **one HTML file** you can open i
 
 It is small on purpose, and it is safe to point at any project: it only reads files as text. It never runs, builds or installs anything from the project, and it makes no network calls.
 
+## What you get
+
+Screenshots of `/codetree:scan` run on a C# and Angular web app. You open the one HTML file, pick an area, and drill down.
+
+**1. The home page.** One tile per area (here `backend`, `frontend`, `loadtest`) with how much of it is described, and the totals: controllers, endpoints, how many the front end uses, and classes and members.
+
+![The home page: totals and one tile per area](docs/images/home.png)
+
+**2. An area.** Click `backend` and every web controller becomes a tile with its route, its description, how many methods of each kind it has (GET, POST, PUT, PATCH, DELETE) and how many front-end functions call it. Type in the box or click a verb to filter.
+
+![The backend area: one tile per controller, with a filter](docs/images/controllers.png)
+
+**3. A controller.** Each method is a card: its description, the front-end functions that call it (left), and the back-end code it goes on to call, two levels down (right). "Expand all" and "Collapse all" open and close the cards.
+
+![A controller: each method with its front-end callers and the back-end flow](docs/images/controller-flow.png)
+
+**4. A class.** Any class or file opens to its members with their descriptions and signatures. Descriptions an agent wrote are marked **generated** until you accept them.
+
+![A front-end class: its methods, descriptions and signatures](docs/images/class-members.png)
+
+The controller tiles and the flow need a C# web project; any C#, TypeScript/JavaScript or Python project gets the areas, classes and members.
+
 ## Supported stack
 
 Only these, on purpose:
