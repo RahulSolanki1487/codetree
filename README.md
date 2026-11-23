@@ -1,6 +1,6 @@
 # codetree
 
-A Claude Code plugin that turns a codebase into **one HTML file** you can open in the browser: the main areas, the classes or files in each, and their functions and methods, with their descriptions and **one search box** across all of it. A second command finds what has no description, has Claude write one plain sentence for each, and shows you the result as a `git diff` to review.
+A Claude Code plugin that turns a codebase into **one HTML file** you can open in the browser: the main areas, the classes or files in each, and their functions and methods, with their descriptions and **one search box** across all of it. A second command finds what has no description, has your AI assistant (Claude Code or GitHub Copilot) write one plain sentence for each, and shows you the result as a `git diff` to review.
 
 It is small on purpose, and it is safe to point at any project: it only reads files as text. It never runs, builds or installs anything from the project, and it makes no network calls.
 
@@ -38,28 +38,49 @@ Only these, on purpose:
 
 Files in any other language are listed as skipped and are never guessed at. If your project is not mostly in these languages, this tool is not for it (yet).
 
-## Install
+## Install and use
 
-In Claude Code:
+The scanner is the same everywhere: one Node.js (20 or newer) script with its grammars. Only the way you call it differs. Pick your assistant.
+
+### Claude Code
+
+Install the plugin:
 
 ```
 /plugin install codetree --marketplace RahulSolanki1487/codetree
 ```
 
-(or `/plugin marketplace add RahulSolanki1487/codetree`, then `/plugin install codetree@codetree`). Nothing else to install: the tool is one bundled file inside the plugin.
-
-## Use
+(or `/plugin marketplace add RahulSolanki1487/codetree`, then `/plugin install codetree@codetree`). Nothing else to install: the tool is one bundled file inside the plugin. Then, in your project:
 
 ```
 /codetree:scan        writes code-tree.html in the project; open it in a browser
 /codetree:describe    writes the missing descriptions as comments, for you to review
 ```
 
+### GitHub Copilot (VS Code)
+
+Copilot has no plugins like this, so codetree comes as two **prompt files** that run the same steps in Copilot Chat's **agent mode**.
+
+1. Get codetree anywhere on your machine (`git clone` this repository, or download it). Node.js 20 or newer must be installed. There is nothing to `npm install`.
+2. Copy the two files from [`copilot/prompts/`](copilot/prompts) into your project's `.github/prompts/` folder (or into your VS Code user prompts folder to use them in every project).
+3. In Copilot Chat, type the prompt's name:
+
+```
+/codetree-scan        writes code-tree.html in the project; open it in a browser
+/codetree-describe    writes the missing descriptions as comments, for you to review
+```
+
+VS Code asks for the path of your codetree folder when you run a prompt. By default Copilot asks before it runs a terminal command, so you see exactly what it runs. Use agent mode and a model that can run terminal commands. If your VS Code version names the prompt-file setting `agent` instead of `mode`, change that one line at the top of each file.
+
+These prompts were written to match the Claude Code skills step for step, but they have not been run end to end in Copilot yet: if something does not work in your version, please open an issue.
+
+### What the two commands do
+
 `scan` shows the areas (the top-level folders), then the classes in one, then a class's members. It leaves out what the project's own `.gitignore` ignores (build output, copied bundles, vendored code) and minified or bundled files; `--no-gitignore` reads those too. Anything without a description says "no description yet", and a switch shows only those. It never invents a description.
 
-`describe` asks before it starts, lists what is missing, has Claude describe each item **from its code only**, checks every sentence, and inserts it as a comment in the language's own style. You read the change with `git diff`; descriptions stay marked "generated" in the page until you run `codetree describe --accept`.
+`describe` asks before it starts, lists what is missing, has the assistant describe each item **from its code only**, checks every sentence, and inserts it as a comment in the language's own style. You read the change with `git diff`; descriptions stay marked "generated" in the page until you run `codetree describe --accept`.
 
-### Without Claude Code
+### Without an assistant (any terminal, or CI)
 
 The tool is a plain Node.js (20 or newer) script:
 
@@ -77,8 +98,8 @@ An optional `codetree.json` at the project's root renames areas: `{ "name": "My 
 ## How it stays safe
 
 - **Nothing from the project runs.** Files are read as text and parsed with pinned tree-sitter grammars (WebAssembly) that ship in this repository; each is checked against a SHA-256 before it is loaded. Links are never followed.
-- **No network, no telemetry, no keys.** The tool never calls a model. Claude runs in your own session.
-- **The agent only returns text.** `describe` takes a list of `{id, description}`, refuses anything with markup, links, quotes or a comment ending, and inserts the rest itself. Claude never edits your files.
+- **No network, no telemetry, no keys.** The tool never calls a model. Your assistant (Claude Code or Copilot) runs in your own session.
+- **The agent only returns text.** `describe` takes a list of `{id, description}`, refuses anything with markup, links, quotes or a comment ending, and inserts the rest itself. The assistant never edits your files.
 - **Your code is treated as data.** A comment saying "ignore your instructions" is something to describe, not something to obey.
 - **The page is one file** that draws everything as text. Its only outside request is the Bootstrap stylesheet (pinned to version 5.3.9 with an integrity checksum, from cdn.jsdelivr.net); the policy allows nothing else, and the page still works, just plainer, offline. Nothing from your code is ever sent.
 - It will not overwrite a file it did not make.
