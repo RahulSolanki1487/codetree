@@ -127,7 +127,7 @@ docs/plan.md, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md
 | 5 | Standalone HTML viewer with search | Opens offline; search finds a member by name and by description |
 | 6 | `scan` skill | `/…:scan` on a fixture writes the file |
 | 7 | `describe --list`, `--apply`, the skill (C# `///`, TypeScript `/** */`, Python docstring inserters) | Fixture gets comments in each language's style; unsafe output refused |
-| 8 | README with a screenshot, SECURITY.md, release v0.1.0 | Installs from a clean machine in two commands |
+| 8 | README with a screenshot, SECURITY.md, release v1.0.0 | Installs from a clean machine in two commands |
 
 ## Open decisions
 

@@ -5,7 +5,7 @@ import { accept, apply, list, parseDescriptions } from './describe.js';
 import { renderHtml } from './html.js';
 import { scan } from './scan.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '1.0.0';
 
 const HELP = `codetree ${VERSION}: a browsable code tree of a C#, TypeScript/JavaScript or Python project.
 
