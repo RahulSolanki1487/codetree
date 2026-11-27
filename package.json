@@ -1,6 +1,6 @@
 {
   "name": "codetree",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Turns a C#, TypeScript/JavaScript or Python codebase into one browsable HTML file, and finds missing descriptions.",
   "type": "module",
   "license": "MIT",

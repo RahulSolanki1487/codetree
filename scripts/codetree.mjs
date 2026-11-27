@@ -4956,7 +4956,7 @@ function renderHtml(model) {
 }
 
 // src/cli.js
-var VERSION = "0.1.0";
+var VERSION = "1.0.0";
 var HELP = `codetree ${VERSION}: a browsable code tree of a C#, TypeScript/JavaScript or Python project.
 
   codetree scan [folder] [--out code-tree.html] [--json code-tree.json] [--no-gitignore]
